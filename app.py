@@ -67,27 +67,28 @@ section[data-testid="stSidebar"] { display: none; }
     font-size: 1.15rem;
     font-style: italic;
     color: #2e86c1;
-    margin-bottom: 28px;
+    margin-bottom: 8px;
 }
 .section-heading {
     font-size: 1.35rem;
     font-weight: 600;
     color: #148f77;
-    margin-bottom: 14px;
+    margin-top: 4px;
+    margin-bottom: 6px;
 }
 
 /* Input box */
 .input-box {
     border: 1.5px solid #888;
     border-radius: 4px;
-    padding: 22px 28px 18px 28px;
+    padding: 12px 28px 10px 28px;
     background: #fff;
-    margin-bottom: 28px;
+    margin-bottom: 16px;
 }
 .input-row {
     display: flex;
     align-items: center;
-    padding: 10px 0;
+    padding: 6px 0;
     border-bottom: 1px solid #f0f0f0;
     font-size: 1.05rem;
     color: #1a2332;
@@ -515,6 +516,7 @@ def run_water_balance(met_df, profile, init_fraction=0.5):
             'et'       : actual_es + out['transp'],
             'sw_total' : sw_total,
             'pasw'     : round(pasw, 2),
+            'sw_layers': list(float(v) for v in sw),  # per-layer SW (mm absolute)
         })
 
     df  = pd.DataFrame(records, index=met_df.index)
@@ -587,20 +589,27 @@ def make_pasw_chart(recent_df, hist_dfs, profile, station_name,
     x_vals   = recent_df.index   # use recent dates as x-axis for all traces
 
     hist_aligned = []
-    for hdf in hist_dfs:
-        seg = hdf['pasw'].values[:n_recent]   # first N days only
+    for idx, hdf in enumerate(hist_dfs):
+        seg = hdf['pasw'].values[:n_recent]
         if len(seg) == 0:
             continue
-        # Trim both to the shorter length in case a year has fewer days
         n = min(len(seg), n_recent)
         hist_aligned.append(seg[:n])
-        ax.plot(x_vals[:n], seg[:n], color=C_HIST, lw=0.8, alpha=0.55, zorder=1)
+        is_last = (idx == len(hist_dfs) - 1)
+        last_year = hist_dfs[-1].index[0].year if hist_dfs else ''
+        ax.plot(x_vals[:n], seg[:n],
+                color='#6A8FAF' if is_last else C_HIST,
+                lw=1.4 if is_last else 0.8,
+                alpha=0.85 if is_last else 0.55,
+                zorder=2 if is_last else 1,
+                label=f'Last year ({last_year})' if is_last else None)
 
-    # ── Historical mean line ──────────────────────────────────────────────
+    # ── Historical mean line — black dotted ───────────────────────────────
     if hist_aligned:
         min_len   = min(len(s) for s in hist_aligned)
         mean_pasw = np.mean([s[:min_len] for s in hist_aligned], axis=0)
-        ax.plot(x_vals[:min_len], mean_pasw, color=C_MEAN, lw=2.2, zorder=3,
+        ax.plot(x_vals[:min_len], mean_pasw,
+                color='#222222', lw=1.8, ls=':', zorder=3,
                 label=f'Historical mean ({len(hist_aligned)} yrs)')
 
     # ── Recent simulation line ────────────────────────────────────────────
@@ -651,6 +660,36 @@ def input_form():
     <div class="page-subtitle">Accumulated soil water over a fallow</div>
     <div class="section-heading">Set up paddock</div>
     ''', unsafe_allow_html=True)
+
+    # ── About expander ───────────────────────────────────────────────────
+    with st.expander("What is this tool?"):
+        st.markdown("""
+**Howwet2026** estimates how much rain has been stored in your soil since the start of a fallow.
+
+**How to use it**
+1. Search for the nearest weather station to your paddock
+2. Select the soil type that best matches your country
+3. Enter the date your fallow started and roughly how full the soil was at that point
+4. Click **Fetch data and run analysis**
+
+**What the chart shows**
+The dark blue line is your paddock's estimated soil water for this fallow.
+The lighter lines show how the same period played out across the last 19 years — so you can see whether this season is tracking above or below average.
+The dotted black line is the 19-year mean while a slightly darker blue line shows last year's pattern.
+
+A summary can be exported using the **Export JPEG** button.
+The **Water balance** tab at the bottom of the analysis describes water balance components.
+
+**What is PAWC?**
+Plant Available Water Capacity — the total water your soil can hold between the wilting point and field capacity.
+A reading of 100% means the soil is full; 0% means it is at wilting point with nothing left for a crop.
+
+**Fallow efficiency**
+The percentage of rainfall received during the fallow that ended up stored in the soil.
+Values above 30% are generally good for dryland farming in Queensland.
+
+*The model uses the same water balance science as PERFECT (1994) and HowLeaky (2003) developed by the Queensland Department of Natural Resources. This app is based on previous decision support tools (Howwet? 1994; Australian CliMate 2013 and SoilWaterApp 2014).*
+        """)
 
     soil_files = load_soil_files()
     soil_labels = [f.stem for f in soil_files] if soil_files else []
@@ -897,40 +936,6 @@ def main():
 
     status.empty()
 
-    # ── Debug: water balance totals ───────────────────────────────────────
-    with st.expander("Water balance"):
-        rain_t  = recent_df['rain'].sum()
-        ro_t    = recent_df['runoff'].sum()
-        es_t    = recent_df['soil_evap'].sum()
-        tr_t    = recent_df['transp'].sum()
-        dr_t    = recent_df['drainage'].sum()
-        dsw     = recent_df['sw_total'].iloc[-1] - recent_df['sw_total'].iloc[0]
-        err     = rain_t - ro_t - es_t - tr_t - dr_t - dsw
-        st.markdown(f"""
-| Component | mm | % of rain |
-|---|---|---|
-| Rainfall | {rain_t:.1f} | 100 |
-| Runoff | {ro_t:.1f} | {ro_t/rain_t*100:.1f} |
-| Soil evap | {es_t:.1f} | {es_t/rain_t*100:.1f} |
-| Transpiration | {tr_t:.1f} | {tr_t/rain_t*100:.1f} |
-| Deep drainage | {dr_t:.1f} | {dr_t/rain_t*100:.1f} |
-| Δ Soil water | {dsw:.1f} | {dsw/rain_t*100:.1f} |
-| **Water check** | **{err:.3f}** | |
-        """)
-        epan_src  = "SILO pan evap" if recent_df['epan'].sum() > 10 else "estimated from radiation"
-        sw_peak   = recent_df['sw_total'].max()
-        paw_start = recent_df['pasw'].iloc[0]
-        paw_end   = recent_df['pasw'].iloc[-1]
-        st.caption(
-            f"Epan: {recent_df['epan'].mean():.1f} mm/day mean  ({recent_df['epan'].sum():.0f} mm total)  |  "
-            f"source: {epan_src}  |  "
-            f"PAW start: {paw_start:.0f} mm  "
-            f"PAW end: {paw_end:.0f} mm  "
-            f"PAW peak: {recent_df['pasw'].max():.0f} mm  |  "
-            f"PAWC: {pawc:.0f} mm  |  "
-            f"Init: {init_pct}% of PAWC"
-        )
-
     # ── Results ───────────────────────────────────────────────────────────
     final_pasw   = float(recent_df['pasw'].iloc[-1])
     pawc_pct     = final_pasw / pawc * 100 if pawc > 0 else 0.0
@@ -940,7 +945,7 @@ def main():
     start_label  = start_date.strftime('%d %b %Y')
 
     # ── Soil profile SVG ─────────────────────────────────────────────────────
-    def _soil_profile_svg(profile, final_pasw):
+    def _soil_profile_svg(profile, final_pasw, final_sw_layers=None):
         """
         Vertical soil profile showing 4 zones per layer:
           dark grey  = below LL (unavailable)
@@ -948,17 +953,16 @@ def main():
           light grey = empty available (SW to DUL)
           mid grey   = above DUL (drainage zone)
         X-axis proportional to volumetric fraction / SAT.
+        final_sw_layers: list of actual SW (mm absolute) per layer from simulation.
         """
         layers      = profile.layers
         total_depth = sum(l.thickness for l in layers)
         BAR_W = 81    # px width of profile bar (50% wider)
         BAR_H = 200   # px total height = 2m fixed scale (1px per cm)
 
-        # Estimate SAT fraction for each layer (sat_mm / thickness)
-        # Use as common scale denominator
         elements = []
         y = 0
-        for lyr in layers:
+        for i, lyr in enumerate(layers):
             h      = max(4, round(lyr.thickness / 2000.0 * BAR_H))  # fixed 2m scale
             sat_mm = lyr.sat_mm
             if sat_mm <= 0:
@@ -970,11 +974,16 @@ def main():
             x_dul = round(lyr.dul_mm * scale)
             x_sat = BAR_W
 
-            # Current SW in this layer (distribute PAW proportionally by layer PAWC)
-            lyr_paw  = max(0.0, min(final_pasw * lyr.pawc / profile.pawc_total,
-                                    lyr.pawc)) if profile.pawc_total > 0 else 0.0
-            x_sw  = round((lyr.ll_mm + lyr_paw) * scale)
-            x_sw  = min(x_sw, x_dul)
+            # Use actual per-layer SW from simulation if available
+            if final_sw_layers is not None and i < len(final_sw_layers):
+                sw_this = float(final_sw_layers[i])
+            else:
+                # fallback: distribute PAW proportionally
+                lyr_paw = max(0.0, min(final_pasw * lyr.pawc / profile.pawc_total,
+                                       lyr.pawc)) if profile.pawc_total > 0 else 0.0
+                sw_this = lyr.ll_mm + lyr_paw
+            x_sw  = round(sw_this * scale)
+            x_sw  = max(x_ll, min(x_sw, x_dul))
 
             # Layer divider line (except first)
             if y > 0:
@@ -1025,7 +1034,8 @@ def main():
         )
         return svg
 
-    profile_svg = _soil_profile_svg(profile, final_pasw)
+    final_sw_layers = recent_df['sw_layers'].iloc[-1]
+    profile_svg = _soil_profile_svg(profile, final_pasw, final_sw_layers)
 
     # Summary box with profile beside it
     col_box, col_prof = st.columns([5, 1])
@@ -1083,6 +1093,40 @@ def main():
     )
 
     plt.close(fig)
+
+    # ── Water balance expander (below chart) ──────────────────────────────
+    with st.expander("Water balance"):
+        rain_t  = recent_df['rain'].sum()
+        ro_t    = recent_df['runoff'].sum()
+        es_t    = recent_df['soil_evap'].sum()
+        tr_t    = recent_df['transp'].sum()
+        dr_t    = recent_df['drainage'].sum()
+        dsw     = recent_df['sw_total'].iloc[-1] - recent_df['sw_total'].iloc[0]
+        err     = rain_t - ro_t - es_t - tr_t - dr_t - dsw
+        st.markdown(f"""
+| Component | mm | % of rain |
+|---|---|---|
+| Rainfall | {rain_t:.1f} | 100 |
+| Runoff | {ro_t:.1f} | {ro_t/rain_t*100:.1f} |
+| Soil evap | {es_t:.1f} | {es_t/rain_t*100:.1f} |
+| Transpiration | {tr_t:.1f} | {tr_t/rain_t*100:.1f} |
+| Deep drainage | {dr_t:.1f} | {dr_t/rain_t*100:.1f} |
+| Δ Soil water | {dsw:.1f} | {dsw/rain_t*100:.1f} |
+| **Water check** | **{err:.3f}** | |
+        """)
+        epan_src  = "SILO pan evap" if recent_df['epan'].sum() > 10 else "estimated from radiation"
+        sw_peak   = recent_df['sw_total'].max()
+        paw_start = recent_df['pasw'].iloc[0]
+        paw_end   = recent_df['pasw'].iloc[-1]
+        st.caption(
+            f"Epan: {recent_df['epan'].mean():.1f} mm/day mean  ({recent_df['epan'].sum():.0f} mm total)  |  "
+            f"source: {epan_src}  |  "
+            f"PAW start: {paw_start:.0f} mm  "
+            f"PAW end: {paw_end:.0f} mm  "
+            f"PAW peak: {recent_df['pasw'].max():.0f} mm  |  "
+            f"PAWC: {pawc:.0f} mm  |  "
+            f"Init: {init_pct}% of PAWC"
+        )
 
 
 if __name__ == '__main__':
