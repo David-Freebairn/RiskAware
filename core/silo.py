@@ -138,75 +138,146 @@ def fetch_station_met(station_id: int, start: str, end: str) -> pd.DataFrame:
 def _parse_patched_point(text: str, station_id: int) -> pd.DataFrame:
     """
     Parse SILO Patched Point CSV response into a clean DataFrame.
-    Handles the variable-length comment header before the data columns.
+
+    Handles all known SILO format variations:
+      - comment=R  : Date,daily_rain,max_temp,min_temp,evap_pan,...
+      - comment=RD : Date,Rainfall(mm),MaxTemp(C),...
+      - DataDrill  : Date,daily_rain,...
+    Date column may be YYYYMMDD integer or YYYY-MM-DD string.
     """
     lines = text.splitlines()
+    preview = "\n".join(lines[:15])
 
-    # Find the header row — first line with 'date' and commas
+    # ── Check for server-side errors first ───────────────────────────────
+    low_text = text.lower()
+    if "rejected" in low_text and len(text) < 500:
+        raise RuntimeError(
+            f"SILO rejected the request (station {station_id}).\n"
+            "The station ID may be invalid, or SILO may be temporarily unavailable.\n"
+            f"Response:\n{preview}"
+        )
+
+    # ── Find the header row ───────────────────────────────────────────────
+    # Criteria: a comma-separated line where one token looks like a date
+    # label ("date", "yyyy") or contains "rain"
     header_idx = None
     for i, line in enumerate(lines):
-        low = line.lower()
-        if "," in low and ("daily_rain" in low or
-                           ("date" in low and "rain" in low)):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        low = stripped.lower()
+        if "," not in low and "\t" not in low:
+            continue
+        # Looks like a header if it has 'date' or 'rain' in a field
+        tokens = [t.strip().lower() for t in low.replace("\t", ",").split(",")]
+        if any(t in ("date", "yyyy", "yyyymmdd") for t in tokens):
+            header_idx = i
+            break
+        if any("rain" in t and "source" not in t for t in tokens):
             header_idx = i
             break
 
     if header_idx is None:
-        # Check for SILO error messages
-        preview = "\n".join(lines[:10])
-        if "rejected" in text.lower() or "error" in text.lower():
-            raise RuntimeError(
-                f"SILO rejected the request for station {station_id}.\n"
-                "Check the station ID is valid and try again.\n"
-                f"Response preview:\n{preview}"
-            )
         raise RuntimeError(
             f"Could not find data header in SILO response "
-            f"for station {station_id}.\nPreview:\n{preview}"
+            f"for station {station_id}.\n"
+            f"First 15 lines:\n{preview}"
         )
 
-    csv_text = "\n".join(lines[header_idx:])
-    raw_df = pd.read_csv(io.StringIO(csv_text))
-    raw_df.columns = [c.strip().lower() for c in raw_df.columns]
-
-    # Build standardised output
-    df = pd.DataFrame()
-    df.index = pd.to_datetime(
-        raw_df["date"].astype(str), format="%Y%m%d", errors="coerce"
+    # ── Parse the CSV from the header row onward ──────────────────────────
+    sep = "\t" if "\t" in lines[header_idx] else ","
+    csv_text = "\n".join(
+        l for l in lines[header_idx:]
+        if l.strip() and not l.strip().startswith("#")
     )
+    raw_df = pd.read_csv(io.StringIO(csv_text), sep=sep, dtype=str)
+
+    # Normalise column names: lowercase, strip whitespace and unit suffixes
+    # e.g. "Rainfall(mm)" -> "rainfall_mm", "Date" -> "date"
+    def _norm_col(c):
+        c = c.strip().lower()
+        c = c.replace("(", "_").replace(")", "").replace(" ", "_")
+        c = c.rstrip("_")
+        return c
+
+    raw_df.columns = [_norm_col(c) for c in raw_df.columns]
+
+    # ── Identify the date column ──────────────────────────────────────────
+    date_col = None
+    for candidate in ("date", "yyyy", "yyyymmdd"):
+        if candidate in raw_df.columns:
+            date_col = candidate
+            break
+    if date_col is None:
+        # Fall back to first column if it looks numeric (YYYYMMDD)
+        first = raw_df.columns[0]
+        if raw_df[first].str.match(r"^\d{8}$").any():
+            date_col = first
+
+    if date_col is None:
+        raise RuntimeError(
+            f"Could not identify date column in SILO data for station {station_id}.\n"
+            f"Columns found: {list(raw_df.columns)}\n"
+            f"Header line: {lines[header_idx]}"
+        )
+
+    # ── Parse dates — handle YYYYMMDD int or YYYY-MM-DD string ───────────
+    date_raw = raw_df[date_col].astype(str).str.strip()
+    # Try YYYYMMDD first (most common)
+    dates = pd.to_datetime(date_raw, format="%Y%m%d", errors="coerce")
+    # Fall back to ISO format
+    mask_failed = dates.isna()
+    if mask_failed.any():
+        dates[mask_failed] = pd.to_datetime(
+            date_raw[mask_failed], format="%Y-%m-%d", errors="coerce"
+        )
+    # Final fallback — let pandas infer
+    still_failed = dates.isna()
+    if still_failed.any():
+        dates[still_failed] = pd.to_datetime(
+            date_raw[still_failed], errors="coerce"
+        )
+
+    # ── Build standardised output DataFrame ──────────────────────────────
+    df = pd.DataFrame(index=dates)
     df.index.name = "date"
-    df = df[df.index.notna()]
+    df = df[df.index.notna()].copy()
+    valid_mask = dates.notna().values
+
+    def _get_col(raw, *candidates):
+        """Return first matching column as float array, or NaN array."""
+        for c in candidates:
+            if c in raw.columns:
+                return pd.to_numeric(raw.loc[valid_mask, c], errors="coerce").values
+        return np.full(valid_mask.sum(), np.nan)
+
+    df["rain"]      = _get_col(raw_df, "daily_rain", "rainfall_mm", "rain", "rainfall")
+    df["tmax"]      = _get_col(raw_df, "max_temp",   "maxtemp_c",   "tmax", "maximum_temperature_c")
+    df["tmin"]      = _get_col(raw_df, "min_temp",   "mintemp_c",   "tmin", "minimum_temperature_c")
+    df["epan"]      = _get_col(raw_df, "evap_pan",   "evaporation_mm", "epan", "pan_evap")
+    df["radiation"] = _get_col(raw_df, "radiation",  "solar_radiation_mj_m2")
+    df["vp"]        = _get_col(raw_df, "vp",         "vapour_pressure_hpa")
+
+    df["tmean"] = np.where(
+        np.isnan(df["tmax"].values) | np.isnan(df["tmin"].values),
+        np.nan,
+        (df["tmax"].values + df["tmin"].values) / 2.0,
+    )
 
     df["year"]  = df.index.year
     df["month"] = df.index.month
     df["day"]   = df.index.day
     df["doy"]   = df.index.day_of_year
 
-    # Column name mapping: SILO name -> standard name
-    col_map = {
-        "daily_rain": "rain",
-        "max_temp":   "tmax",
-        "min_temp":   "tmin",
-        "evap_pan":   "epan",
-        "radiation":  "radiation",
-        "vp":         "vp",
-        "rh_tmax":    "rh_tmax",
-        "rh_tmin":    "rh_tmin",
-    }
-    for silo_col, our_col in col_map.items():
-        if silo_col in raw_df.columns:
-            df[our_col] = raw_df[silo_col].values
-        else:
-            df[our_col] = np.nan
+    # Ensure epan and rain have no NaN (model needs numeric values)
+    df["epan"] = np.where(np.isnan(df["epan"].values), 0.0, df["epan"].values)
+    df["rain"] = np.where(np.isnan(df["rain"].values), 0.0,
+                          np.maximum(0.0, df["rain"].values))
 
-    df["tmean"] = (df["tmax"] + df["tmin"]) / 2.0
-
-    # Ensure epan is never NaN (model needs a value)
-    if df["epan"].isna().all():
-        df["epan"] = 0.0
-    else:
-        df["epan"] = df["epan"].fillna(0.0)
-
-    df["rain"] = df["rain"].fillna(0.0).clip(lower=0)
+    if len(df) == 0:
+        raise RuntimeError(
+            f"SILO returned data for station {station_id} but no valid rows "
+            f"could be parsed. Check station ID and date range."
+        )
 
     return df
