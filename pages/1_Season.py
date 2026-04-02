@@ -29,10 +29,11 @@ from datetime import date, timedelta
 from calendar import monthrange
 
 from core.silo import search_stations, fetch_station_rainfall
+from core.styles import apply_styles
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="How is the season going?",
+    page_title="How's the season?",
     page_icon="📈",
     layout="wide",
 )
@@ -40,37 +41,7 @@ st.set_page_config(
 MONTHS = ["Jan","Feb","Mar","Apr","May","Jun",
           "Jul","Aug","Sep","Oct","Nov","Dec"]
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600&display=swap');
-html, body, [class*="css"] { font-family: 'Source Sans 3', sans-serif; }
-.page-title {
-    font-family: 'Merriweather', serif; font-size: 2.4rem; font-weight: 700;
-    color: #1a4a6e; line-height: 1.15; margin-bottom: 2px;
-}
-.page-subtitle {
-    font-family: 'Merriweather', serif; font-style: italic;
-    font-size: 1.05rem; color: #555; margin-bottom: 12px;
-}
-.result-headline {
-    font-family: 'Merriweather', serif; font-size: 1.05rem;
-    color: #1a1a1a; line-height: 1.8;
-    border: 2px solid #ccc; border-radius: 4px;
-    padding: 16px 22px; background: #fff; margin-bottom: 16px;
-}
-.rank { font-size: 1.9rem; font-weight: 700; color: #1a4a6e; vertical-align: baseline; }
-.diff-above { font-size: 0.9rem; font-weight: 600; border-radius: 3px;
-              padding: 2px 8px; background: #eaf5ea; color: #1a6a1a; }
-.diff-below { font-size: 0.9rem; font-weight: 600; border-radius: 3px;
-              padding: 2px 8px; background: #fdf0e8; color: #8a3a00; }
-.r-site { font-size: 0.88rem; color: #555; letter-spacing: 0.03em; }
-.chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 16px 0; }
-.chip { background: #f0f5fb; border: 1px solid #c0d4e8; border-radius: 3px;
-        padding: 3px 10px; font-size: 0.82rem; color: #2a4a6a; }
-.chip b { color: #1a1a1a; }
-</style>
-""", unsafe_allow_html=True)
+apply_styles()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -312,13 +283,13 @@ def ordinal(n: int) -> str:
 # ── UI ────────────────────────────────────────────────────────────────────────
 
 st.markdown("""
-<div class="page-title">📈 How is the season going?</div>
+<div class="page-title">📈 How's the season?</div>
 <div class="page-subtitle">Comparing this season's rainfall against all years on record</div>
 """, unsafe_allow_html=True)
 
 # ── Step 1: Select site ───────────────────────────────────────────────────────
 with st.container(border=True):
-    st.markdown("**Select site**")
+    st.markdown('<p class="section-title">Select site</p>', unsafe_allow_html=True)
 
     col1, col2 = st.columns([1.5, 2.5])
     with col1:
@@ -385,7 +356,7 @@ with st.container(border=True):
 
 # ── Step 2: Select duration ───────────────────────────────────────────────────
 with st.container(border=True):
-    st.markdown("**Select duration**")
+    st.markdown('<p class="section-title">Select duration</p>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([2.5, 1, 2])
     with col1:
         st.markdown("How does the last")

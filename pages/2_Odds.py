@@ -16,74 +16,14 @@ import matplotlib.pyplot as plt
 from datetime import date
 
 from core.silo import search_stations, fetch_patched_point
+from core.styles import apply_styles
 
 # ── Page config ───────────────────────────────────────────────────────────────
-st.set_page_config(page_title="What are the odds?", page_icon="🌧️", layout="wide")
+st.set_page_config(page_title="What are the odds?", page_icon="🎲", layout="wide")
 
 MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
-# ── CSS (unchanged from rainfall_app.py) ─────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
-
-html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-.stApp { background-color: #f4f7fb; }
-#MainMenu, footer, header { visibility: hidden; }
-.block-container { padding-top: 1.2rem; padding-bottom: 1.5rem; max-width: 1100px; }
-.big-title {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 4.2rem; font-weight: 800;
-    color: #0b1f3a; letter-spacing: -0.04em;
-    line-height: 1; margin: 0;
-}
-.big-subtitle {
-    font-family: 'DM Sans', sans-serif; font-style: italic;
-    font-size: 1.3rem; font-weight: 400; color: #0b1f3a;
-    margin: 0.15rem 0 0 0.3rem;
-}
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    background: #fff !important; border: 1.5px solid #d0dcea !important;
-    border-radius: 12px !important; padding: 0.9rem 1.4rem 1.0rem !important;
-    margin-bottom: 0.7rem !important;
-    box-shadow: 0 1px 4px rgba(11,31,58,0.06) !important;
-}
-.panel-title {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 1.3rem; font-weight: 700; color: #2979c4;
-    letter-spacing: -0.02em; margin: 0 0 0.9rem 0;
-}
-.stat-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.5rem; }
-.stat-chip {
-    background: #eef5ff; border: 1px solid #b8d0ec;
-    border-radius: 6px; padding: 0.3rem 0.7rem;
-    font-size: 0.8rem; color: #3a5a7a; font-family: 'DM Mono', monospace;
-}
-.stat-chip b { color: #0b1f3a; font-weight: 600; }
-.result-banner {
-    background: #eef5ff; border: 1.5px solid #b8d4f0; border-radius: 8px;
-    padding: 0.8rem 1.4rem; margin: 0.8rem 0;
-    display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
-}
-.rb-label { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: #4a7aaa;
-            letter-spacing: 0.08em; text-transform: uppercase; }
-.rb-value { font-family: Arial, Helvetica, sans-serif; font-size: 1.3rem;
-            font-weight: 800; color: #0b1f3a; letter-spacing: -0.02em; }
-.rb-pct   { font-family: Arial, Helvetica, sans-serif; font-size: 2.2rem;
-            font-weight: 800; color: #2979c4; letter-spacing: -0.03em; margin-left: auto; }
-.stButton > button {
-    border-radius: 8px !important; font-weight: 600 !important;
-    border: 1px solid #c0d0e0 !important;
-    background: #fff !important; color: #0b1f3a !important;
-}
-.stButton > button[kind="primary"] {
-    background: #0b1f3a !important; color: #fff !important;
-    border-color: #0b1f3a !important; font-size: 1rem !important;
-    font-weight: 700 !important; padding: 0.65rem 2rem !important;
-    display: block !important; margin: 0 auto !important;
-}
-</style>
-""", unsafe_allow_html=True)
+apply_styles()
 
 
 # ── Session state ─────────────────────────────────────────────────────────────
@@ -149,22 +89,10 @@ def season_label(sm, sd, em, ed):
 
 
 # ── Header ────────────────────────────────────────────────────────────────────
-col_title, col_badge = st.columns([6, 1])
-with col_title:
-    st.markdown("""
-    <div style="padding: 0.2rem 0 0.8rem 0">
-      <p class="big-title">What are the odds?</p>
-      <p class="big-subtitle"><em>of getting rain at</em></p>
-    </div>
-    """, unsafe_allow_html=True)
-with col_badge:
-    st.markdown(
-        "<div style='padding-top:1.6rem;text-align:right'>"
-        "<span style='font-size:0.82rem;color:#6a8aaa;font-weight:500'>Silo API</span>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
+st.markdown("""
+<div class="page-title">🎲 What are the odds?</div>
+<div class="page-subtitle">Rainfall frequency analysis — how often has it happened before?</div>
+""", unsafe_allow_html=True)
 
 # ── Panel 1 — Site ────────────────────────────────────────────────────────────
 def do_search():
@@ -182,27 +110,19 @@ def do_search():
 
 
 with st.container(border=True):
-    t1, t2, t3, t4 = st.columns([1.2, 3.5, 1.0, 0.8])
-    with t1:
-        st.markdown('<p class="panel-title" style="margin-bottom:0.4rem">Site</p>',
-                    unsafe_allow_html=True)
-    with t2:
-        st.markdown('<p style="padding-top:0.55rem;font-size:0.82rem;color:#8aaac4">'
-                    '(Press return to search)</p>', unsafe_allow_html=True)
-    with t3:
-        st.markdown('<p style="padding-top:0.55rem;font-size:0.82rem;color:#8aaac4;'
-                    'text-align:right">Data from</p>', unsafe_allow_html=True)
-    with t4:
-        start_year = st.number_input(
-            "yr", label_visibility="collapsed",
-            min_value=1889, max_value=date.today().year, value=1900, step=1,
+    st.markdown('<p class="section-title">Select site</p>', unsafe_allow_html=True)
+    col1, col2 = st.columns([2.5, 1.0])
+    with col1:
+        st.text_input(
+            "station", label_visibility="collapsed",
+            placeholder="Search station — e.g. Roma, Cairns  (press Enter)",
+            key="search_input", on_change=do_search,
         )
-
-    st.text_input(
-        "station", label_visibility="collapsed",
-        placeholder="e.g. Cairns, Emerald  —  type and press Enter to search",
-        key="search_input", on_change=do_search,
-    )
+    with col2:
+        start_year = st.number_input(
+            "Records from year", min_value=1889,
+            max_value=date.today().year, value=1900, step=1,
+        )
     start_date = date(int(start_year), 1, 1)
 
     if st.session_state.get("search_error"):
@@ -250,7 +170,7 @@ selected_station = st.session_state.get("selected_station")
 
 # ── Panel 2 — Query ───────────────────────────────────────────────────────────
 with st.container(border=True):
-    st.markdown('<p class="panel-title">Set up query</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Set up query</p>', unsafe_allow_html=True)
 
     r1a, r1b, r1c, r1d, r1e, r1f, r1g = st.columns([2.0, 0.65, 0.7, 1.1, 0.65, 0.5, 1.5])
     with r1a: st.markdown('<span style="font-size:1rem">Explore how often</span>',
@@ -276,7 +196,8 @@ with st.container(border=True):
                                          label_visibility="collapsed")
 
 run_btn = st.button("Fetch data and run analysis", type="primary",
-                    disabled=selected_station is None)
+                    disabled=selected_station is None,
+                    use_container_width=True)
 
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
@@ -298,10 +219,10 @@ if run_btn and selected_station:
     yr_from, yr_to = years[0], years[-1]
     ann_mean = df.groupby("year")["rain"].sum().mean()
 
-    st.markdown(f"""<div class="stat-row">
-      <div class="stat-chip">✅ <b>{name}</b></div>
-      <div class="stat-chip"><b>{yr_from}–{yr_to}</b> period</div>
-      <div class="stat-chip">Annual mean <b>{int(round(ann_mean))} mm</b></div>
+    st.markdown(f"""<div class="chip-row">
+      <div class="chip">✅ <b>{name}</b></div>
+      <div class="chip"><b>{yr_from}–{yr_to}</b> period</div>
+      <div class="chip">Annual mean <b>{int(round(ann_mean))} mm</b></div>
     </div>""", unsafe_allow_html=True)
 
     try:

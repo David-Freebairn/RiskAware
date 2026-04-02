@@ -29,14 +29,15 @@ import matplotlib.dates as mdates
 import io
 from datetime import date, timedelta
 
-from core.silo import search_stations, fetch_datadrill_robust
+from core.silo import search_stations, fetch_station_met
 from core.soil_xml import read_soil_xml
 from core.soil import read_prm, init_sw
 from core.waterbalance import daily_water_balance
+from core.styles import apply_styles
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Howwet — Soil Water Monitor",
+    page_title="How much rain stored?",
     page_icon="💧",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -53,32 +54,7 @@ C_MEAN        = "#7B5EA7"
 C_RECENT      = "#1A2F6B"
 C_BG          = "#F4F6F9"
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Source Sans 3', sans-serif; background: #ffffff; }
-section[data-testid="stSidebar"] { display: none; }
-.page-title   { font-size: 2.6rem; font-weight: 700; color: #1a5276; line-height: 1.15; margin-bottom: 2px; }
-.page-subtitle{ font-size: 1.15rem; font-style: italic; color: #2e86c1; margin-bottom: 8px; }
-.result-box   { background: white; border: 2px solid #2d6a9f; border-radius: 6px; padding: 24px 32px; margin-bottom: 20px; }
-.result-title { font-size: 1.15rem; color: #1a2332; margin-bottom: 10px; line-height: 1.6; }
-.result-title .date-loc { color: #c17f24; font-weight: 700; }
-.result-title .loc      { color: #1a9650; font-weight: 700; }
-.fallow-label { font-size: 0.98rem; color: #444; margin-bottom: 16px; }
-.paw-big  { font-size: 2.4rem; font-weight: 700; color: #1a9650; }
-.paw-unit { font-size: 1.1rem; color: #666; margin-left: 6px; }
-.pawc-pct { font-size: 1.5rem; font-weight: 700; color: #1a5276; margin-left: 24px; }
-.status-msg { font-size: 0.88rem; color: #666; font-style: italic; padding: 4px 0; }
-.stButton > button {
-    background: #1a4f7a !important; color: white !important;
-    border: none !important; border-radius: 6px !important;
-    padding: 14px 48px !important; font-size: 1.05rem !important;
-    font-weight: 700 !important; display: block; margin: 0 auto; min-width: 320px;
-}
-.stButton > button:hover { background: #0e3252 !important; }
-</style>
-""", unsafe_allow_html=True)
+apply_styles()
 
 
 # ── Cached helpers ────────────────────────────────────────────────────────────
@@ -89,14 +65,14 @@ def _search(query: str):
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _fetch(lat: float, lon: float, start: str, end: str) -> pd.DataFrame:
+def _fetch(station_id: int, start: str, end: str) -> pd.DataFrame:
     """
-    Fetch SILO DataDrill climate — all key variables in one cached call.
-    Returns: rain, epan, tmax, tmin, tmean, radiation, year, month, day, doy.
-    Temperatures fetched now so adding heat-unit or crop-ET features later
-    needs no change to this function.
+    Cached patched-point fetch — full P51 variables.
+    Returns: rain, epan, tmax, tmin, tmean, radiation, vp, year, month, day, doy.
+    Same station-search flow as Season and Odds — faster and more accurate
+    than DataDrill as it uses actual observed station data.
     """
-    return fetch_datadrill_robust(lat, lon, start, end)
+    return fetch_station_met(station_id, start, end)
 
 
 def load_soil_files():
@@ -307,11 +283,11 @@ yesterday   = today - timedelta(days=1)
 min_start   = today - timedelta(days=MAX_MONTHS_RECENT * 30)
 
 with st.container(border=True):
-    st.markdown("**Set up paddock**")
+    st.markdown('<p class="section-title">Select site</p>', unsafe_allow_html=True)
 
     col1, col2 = st.columns([1.1, 1.4])
     with col1:
-        st.markdown("Weather station")
+        st.markdown("Search station")
     with col2:
         query = st.text_input("station_search", label_visibility="collapsed",
                               placeholder="e.g. Dalby, Emerald", key="hw_query")
@@ -330,17 +306,39 @@ with st.container(border=True):
 
         stations = st.session_state.get("hw_stations", [])
         if stations:
-            labels = [f"{s['name']}  ({s['state']})  lat={s['lat']:.2f}" for s in stations]
-            sel = st.selectbox("Select station", range(len(labels)),
-                               format_func=lambda i: labels[i],
-                               label_visibility="collapsed",
-                               index=st.session_state.get("hw_sel_idx", 0),
-                               key="hw_sel")
-            st.session_state["hw_sel_idx"] = sel
-            station_info = stations[sel]
-            st.session_state["hw_saved_station"] = station_info
-            st.caption(f"📍 {station_info['lat']:.3f}°S, {station_info['lon']:.3f}°E")
-        else:
+            labels = [s["label"] for s in stations]
+            if len(labels) == 1:
+                st.success(f"✅ {labels[0]}")
+                station_info = stations[0]
+                st.session_state["hw_saved_station"] = station_info
+            else:
+                confirmed = st.session_state.get("hw_confirmed", False)
+                chosen    = st.session_state.get("hw_chosen") or labels[0]
+                if chosen not in labels:
+                    chosen = labels[0]
+                if confirmed:
+                    c1, c2 = st.columns([6, 1])
+                    with c1:
+                        st.success(f"📍 {chosen}")
+                    with c2:
+                        if st.button("Change", key="hw_change"):
+                            st.session_state["hw_confirmed"] = False
+                    station_info = next(s for s in stations if s["label"] == chosen)
+                else:
+                    st.caption(f"**{len(labels)} stations found** — select one:")
+                    def _hw_pick():
+                        st.session_state["hw_chosen"]    = st.session_state["hw_radio"]
+                        st.session_state["hw_confirmed"] = True
+                    chosen = st.radio(
+                        "Station", labels,
+                        index=labels.index(chosen) if chosen in labels else 0,
+                        key="hw_radio", label_visibility="collapsed",
+                        on_change=_hw_pick,
+                    )
+                    st.session_state["hw_chosen"] = chosen
+                    station_info = next(s for s in stations if s["label"] == chosen)
+                st.session_state["hw_saved_station"] = station_info
+        elif st.session_state.get("hw_last_query"):
             st.caption("No stations found — try a different name")
 
     st.divider()
@@ -378,8 +376,9 @@ with st.container(border=True):
 
 col_l, col_c, col_r = st.columns([1, 2, 1])
 with col_c:
-    run_clicked = st.button("Fetch data and run analysis",
-                            disabled=(station_info is None or soil_path is None))
+    run_clicked = st.button("Fetch data and run analysis", type="primary",
+                            disabled=(station_info is None or soil_path is None),
+                            use_container_width=True)
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 if run_clicked:
@@ -392,7 +391,7 @@ if run_clicked:
         st.error("No soil files found.")
         st.stop()
 
-    lat, lon  = station_info["lat"], station_info["lon"]
+    sid       = station_info["id"]
     stn_name  = station_info["name"]
     safe_end  = today - timedelta(days=3)
     start_str = start_date.strftime("%Y%m%d")
@@ -412,7 +411,7 @@ if run_clicked:
     status.markdown('<p class="status-msg">Fetching recent climate from SILO...</p>',
                     unsafe_allow_html=True)
     try:
-        recent_met = _fetch(lat, lon, start_str, end_str)
+        recent_met = _fetch(sid, start_str, end_str)
         end_date   = recent_met.index.max().date()
     except Exception as e:
         status.empty()
@@ -423,7 +422,7 @@ if run_clicked:
         f'<p class="status-msg">Fetching {HISTORY_YEARS}-year historical climate...</p>',
         unsafe_allow_html=True)
     try:
-        hist_met = _fetch(lat, lon,
+        hist_met = _fetch(sid,
                           hist_start.strftime("%Y%m%d"),
                           hist_end.strftime("%Y%m%d"))
     except Exception as e:
