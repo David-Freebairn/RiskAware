@@ -73,6 +73,34 @@ def search_stations(query: str) -> list[dict]:
 
 # ── Fetch met data ──────────────────────────────────────────────────────────
 
+def fetch_station_rainfall(station_id: int, start: str, end: str) -> pd.DataFrame:
+    """
+    Fetch daily rainfall only from SILO Patched Point.
+    Used by 1_Season.py.
+
+    Returns
+    -------
+    pd.DataFrame indexed by date with columns:
+        rain, year, month, day, doy
+    """
+    df = fetch_station_met(station_id, start, end)
+    return df[["rain", "year", "month", "day", "doy"]]
+
+
+def fetch_patched_point(station_id: int, start: str, end: str) -> pd.DataFrame:
+    """
+    Fetch full daily met from SILO Patched Point.
+    Used by 2_Odds.py.
+    Alias for fetch_station_met — returns all climate variables.
+
+    Returns
+    -------
+    pd.DataFrame indexed by date with columns:
+        rain, epan, tmax, tmin, tmean, radiation, vp, year, month, day, doy
+    """
+    return fetch_station_met(station_id, start, end)
+
+
 def fetch_station_met(station_id: int, start: str, end: str) -> pd.DataFrame:
     """
     Fetch daily climate from SILO Patched Point for a known station ID.
