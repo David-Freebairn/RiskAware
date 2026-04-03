@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from datetime import date
 
 from core.silo import search_stations, fetch_patched_point
-from core.styles import apply_styles
+from core.styles import apply_styles, save_station, load_station
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="What are the odds?", page_icon="🎲", layout="wide")
@@ -24,6 +24,25 @@ st.set_page_config(page_title="What are the odds?", page_icon="🎲", layout="wi
 MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
 apply_styles()
+st.markdown("""
+<style>
+.result-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #EBF2FB;
+    border: 1px solid #C5D5E8;
+    border-left: 5px solid #2979c4;
+    border-radius: 8px;
+    padding: 1rem 1.4rem;
+    margin-bottom: 1rem;
+}
+.rb-label { font-size: 0.8rem; color: #5a7a9a; text-transform: uppercase;
+            letter-spacing: 0.05em; margin-bottom: 4px; }
+.rb-value { font-size: 1rem; font-weight: 600; color: #0b1f3a; }
+.rb-pct   { font-size: 3rem; font-weight: 800; color: #2979c4; line-height: 1; }
+</style>
+""", unsafe_allow_html=True)
 
 
 # ── Session state ─────────────────────────────────────────────────────────────
@@ -35,6 +54,16 @@ for key, default in [
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
+
+# Pre-populate from shared station if arriving from another page
+_shared = load_station()
+if _shared and not st.session_state.get("search_input"):
+    st.session_state["search_input"]      = _shared.get("name", "")
+    st.session_state["selected_station"]  = _shared
+    st.session_state["stations"]          = [_shared]
+    st.session_state["last_search"]       = _shared.get("name", "")
+    st.session_state["station_confirmed"] = True
+    st.session_state["station_chosen"]    = _shared.get("label", "")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -89,10 +118,8 @@ def season_label(sm, sd, em, ed):
 
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="page-title">🎲 What are the odds?</div>
-<div class="page-subtitle">Rainfall frequency analysis — how often has it happened before?</div>
-""", unsafe_allow_html=True)
+st.title("🎲 What are the odds?")
+st.caption("*Rainfall frequency analysis — how often has it happened before?*")
 
 # ── Panel 1 — Site ────────────────────────────────────────────────────────────
 def do_search():
@@ -162,10 +189,11 @@ with st.container(border=True):
         st.session_state.selected_station = next(
             s for s in st.session_state.stations if s["label"] == selected_label
         )
+        save_station(st.session_state.selected_station)
     elif st.session_state.last_search:
         st.warning("No stations found. Try a shorter search term.")
 
-selected_station = st.session_state.get("selected_station")
+selected_station = st.session_state.get("selected_station") or load_station()
 
 
 # ── Panel 2 — Query ───────────────────────────────────────────────────────────
@@ -361,6 +389,11 @@ if run_btn and selected_station:
             ha="center", va="center", fontsize=9, color="#8aaac4", zorder=2)
         summary_ax.plot([6.5, 6.5], [0.35, 1.85], color="#d0dcea", lw=1.0, zorder=2)
         summary_fig.tight_layout(pad=0)
+
+        # ── Show summary card on screen ───────────────────────────────────
+        st.pyplot(summary_fig)
+
+        # ── Save for download ──────────────────────────────────────────────
         jpeg_buf = _io.BytesIO()
         summary_fig.savefig(jpeg_buf, format="jpeg", dpi=150,
                             bbox_inches="tight", facecolor="#ffffff")
