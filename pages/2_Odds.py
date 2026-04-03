@@ -336,35 +336,7 @@ if run_btn and selected_station:
             Patch(color=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
         ], fontsize=9, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
         fig.tight_layout(pad=1.1)
-        # ── Summary card ──────────────────────────────────────────────────
-        ann_mean = round(df["rain"].groupby(df.index.year).sum().mean())
-        query_str = f">= {int(threshold)} mm rain in any {int(win_days)}-day window · {slabel}"
 
-        st.markdown(f"**{name}**")
-        st.markdown(f"**{yr_from}–{yr_to}** period")
-        st.markdown(f"Annual mean **{ann_mean} mm**")
-        st.markdown(f"Season: {slabel}")
-        st.markdown(f"Query: {query_str}")
-
-        col_l, col_r = st.columns([2, 1])
-        with col_l:
-            st.markdown(
-                f"<div style='font-size:1.6rem; font-weight:800; color:#0b1f3a; "
-                f"padding:1rem; background:#EBF2FB; border-radius:8px; "
-                f"border-left:5px solid #2979c4;'>"
-                f"{n_exceed} of {n} years met or exceeded the threshold"
-                f"</div>",
-                unsafe_allow_html=True
-            )
-        with col_r:
-            st.markdown(
-                f"<div style='font-size:3rem; font-weight:900; color:#2979c4; "
-                f"text-align:center; padding:1rem; background:#EBF2FB; border-radius:8px;'>"
-                f"{int(round(pct))}%"
-                f"<div style='font-size:0.8rem; color:#8aaac4; font-weight:400;'>exceedance frequency</div>"
-                f"</div>",
-                unsafe_allow_html=True
-            )
 
         # ── Bar chart ─────────────────────────────────────────────────────
         st.pyplot(fig)
@@ -409,6 +381,10 @@ if run_btn and selected_station:
             ha="center", va="center", fontsize=9, color="#8aaac4", zorder=2)
         summary_ax.plot([6.5, 6.5], [0.35, 1.85], color="#d0dcea", lw=1.0, zorder=2)
         summary_fig.tight_layout(pad=0)
+
+        # Show on screen
+        st.pyplot(summary_fig)
+
         jpeg_buf = _io.BytesIO()
         summary_fig.savefig(jpeg_buf, format="jpeg", dpi=150,
                             bbox_inches="tight", facecolor="#ffffff")
