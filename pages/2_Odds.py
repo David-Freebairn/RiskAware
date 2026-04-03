@@ -336,23 +336,9 @@ if run_btn and selected_station:
             Patch(color=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
         ], fontsize=9, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
         fig.tight_layout(pad=1.1)
-        st.pyplot(fig)
-
-        # Downloads
-        dl1, dl2 = st.columns(2)
-        with dl1:
-            export = annual_max.copy()
-            export["window_days"]  = int(win_days)
-            export["threshold_mm"] = threshold
-            export["season"]       = slabel
-            st.download_button(
-                "💾  Export CSV",
-                data=export.to_csv(index=False),
-                file_name=f"rolling_window_{name.replace(' ', '_')}.csv",
-                mime="text/csv",
-            )
+        # ── Build summary card ────────────────────────────────────────────
         import io as _io
-        from matplotlib.patches import FancyBboxPatch, Rectangle
+        from matplotlib.patches import FancyBboxPatch
         summary_fig, summary_ax = plt.subplots(figsize=(10, 4.0))
         summary_fig.patch.set_facecolor("#ffffff")
         summary_ax.set_facecolor("#ffffff")
@@ -390,16 +376,33 @@ if run_btn and selected_station:
         summary_ax.plot([6.5, 6.5], [0.35, 1.85], color="#d0dcea", lw=1.0, zorder=2)
         summary_fig.tight_layout(pad=0)
 
-        # ── Show summary card on screen ───────────────────────────────────
+        # ── Show summary card first ───────────────────────────────────────
         st.pyplot(summary_fig)
 
-        # ── Save for download ──────────────────────────────────────────────
+        # ── Then bar chart ────────────────────────────────────────────────
+        st.pyplot(fig)
+
+        # ── Save summary to buffer for download ───────────────────────────
         jpeg_buf = _io.BytesIO()
         summary_fig.savefig(jpeg_buf, format="jpeg", dpi=150,
                             bbox_inches="tight", facecolor="#ffffff")
-        plt.close(summary_fig)
         jpeg_buf.seek(0)
+        plt.close(summary_fig)
         plt.close(fig)
+
+        # ── Downloads ─────────────────────────────────────────────────────
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            export = annual_max.copy()
+            export["window_days"]  = int(win_days)
+            export["threshold_mm"] = threshold
+            export["season"]       = slabel
+            st.download_button(
+                "💾  Export CSV",
+                data=export.to_csv(index=False),
+                file_name=f"rolling_window_{name.replace(' ', '_')}.csv",
+                mime="text/csv",
+            )
         with dl2:
             st.download_button(
                 "🖼️  Download summary image",
