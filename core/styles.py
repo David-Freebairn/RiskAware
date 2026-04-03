@@ -1,13 +1,7 @@
 """
 core/styles.py
 ==============
-Shared Streamlit CSS injected on every page via apply_styles().
-
-Fixes included
---------------
-- Page title / subtitle never truncate — they wrap naturally
-- Section titles, result boxes, status messages consistent across pages
-- Removes Streamlit default top-padding that wastes header space
+Shared Streamlit CSS + station persistence helpers for RiskSmart.
 """
 
 import streamlit as st
@@ -18,55 +12,58 @@ def apply_styles():
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
+def save_station(station_info: dict):
+    """Save selected station to shared session key (persists across pages)."""
+    if station_info:
+        st.session_state["_shared_station"] = station_info
+
+
+def load_station() -> dict | None:
+    """Load shared station — returns None if none selected yet."""
+    return st.session_state.get("_shared_station")
+
+
 _CSS = """
 <style>
 
-/* ── Remove excessive top padding Streamlit adds ────────────────────── */
+/* ── Layout ──────────────────────────────────────────────────────────── */
 .block-container {
     padding-top: 1.2rem !important;
     padding-bottom: 2rem !important;
     max-width: 1100px;
 }
 
-/* ── Stop Streamlit wrapper divs from clipping content ──────────────── */
-[data-testid="stMarkdownContainer"],
-[data-testid="stMarkdownContainer"] > div,
-.stMarkdown,
-.element-container,
-.row-widget {
-    overflow: visible !important;
-    min-width: 0;
-    white-space: normal !important;
+/* ── Result banner (2_Odds.py) ───────────────────────────────────────── */
+.result-banner {
+    background: #0b1f3a;
+    border-radius: 8px;
+    padding: 0.75rem 1.2rem;
+    margin: 0.8rem 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.rb-label {
+    font-size: 0.72rem;
+    color: #5d8ab0;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.rb-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1;
+}
+.rb-pct {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #4da6ff;
+    margin-left: auto;
 }
 
-/* ── Page title ──────────────────────────────────────────────────────── */
-.page-title {
-    font-size: clamp(1.4rem, 3.5vw, 2.1rem);
-    font-weight: 700;
-    color: #1A2F6B;
-    line-height: 1.25;
-    margin: 0 0 0.25rem 0;
-    white-space: normal !important;
-    overflow: visible !important;
-    text-overflow: unset !important;
-    display: block;
-    width: 100%;
-}
-
-/* ── Page subtitle ───────────────────────────────────────────────────── */
-.page-subtitle {
-    font-size: clamp(0.85rem, 2vw, 1rem);
-    color: #555;
-    font-style: italic;
-    margin: 0 0 1rem 0;
-    white-space: normal !important;
-    overflow: visible !important;
-    text-overflow: unset !important;
-    display: block;
-    width: 100%;
-}
-
-/* ── Section headings inside containers ─────────────────────────────── */
+/* ── Section headings inside containers ──────────────────────────────── */
 .section-title {
     font-size: 1rem;
     font-weight: 600;
@@ -74,7 +71,7 @@ _CSS = """
     margin-bottom: 0.4rem;
 }
 
-/* ── Result box ──────────────────────────────────────────────────────── */
+/* ── Result box ───────────────────────────────────────────────────────── */
 .result-box {
     background: #F0F4FA;
     border: 1px solid #C5D5E8;
@@ -83,63 +80,43 @@ _CSS = """
     margin-bottom: 1rem;
 }
 
-.result-title {
-    font-size: 1rem;
-    color: #1a2332;
-    margin-bottom: 0.4rem;
-}
+.result-title { font-size: 1rem; color: #1a2332; margin-bottom: 0.4rem; }
+.date-loc     { font-weight: 600; }
+.loc          { font-weight: 700; color: #1A2F6B; }
+.fallow-label { font-size: 0.9rem; color: #555; margin-bottom: 0.5rem; }
+.paw-big      { font-size: 3rem; font-weight: 800; color: #1A3A6B; line-height: 1; }
+.paw-unit     { font-size: 1.4rem; color: #1A3A6B; margin-left: 4px; }
+.pawc-pct     { font-size: 1.1rem; color: #555; margin-left: 12px; }
 
-.date-loc { font-weight: 600; }
-.loc      { font-weight: 700; color: #1A2F6B; }
-
-.fallow-label {
-    font-size: 0.9rem;
-    color: #555;
-    margin-bottom: 0.5rem;
-}
-
-.paw-big {
-    font-size: 3rem;
-    font-weight: 800;
-    color: #1A3A6B;
-    line-height: 1;
-}
-
-.paw-unit {
-    font-size: 1.4rem;
-    color: #1A3A6B;
-    margin-left: 4px;
-}
-
-.pawc-pct {
-    font-size: 1.1rem;
-    color: #555;
-    margin-left: 12px;
-}
-
-/* ── Status / spinner messages ───────────────────────────────────────── */
+/* ── Status messages ─────────────────────────────────────────────────── */
 .status-msg {
     font-size: 0.9rem;
     color: #1A5276;
     font-style: italic;
 }
 
-/* ── Tighten Streamlit radio / selectbox labels ──────────────────────── */
+/* ── Radio / selectbox labels ────────────────────────────────────────── */
 div[data-testid="stRadio"] label,
 div[data-testid="stSelectbox"] label {
     font-size: 0.9rem;
 }
 
-/* ── Container borders slightly softer ───────────────────────────────── */
+/* ── Container borders ───────────────────────────────────────────────── */
 div[data-testid="stVerticalBlockBorderWrapper"] {
     border-radius: 10px !important;
     border-color: #D0DCF0 !important;
 }
 
-/* ── Divider thinner ────────────────────────────────────────────────── */
+/* ── Divider ─────────────────────────────────────────────────────────── */
 hr {
     margin: 0.6rem 0 !important;
     border-color: #E8EDF5 !important;
+}
+
+/* ── Number input label ──────────────────────────────────────────────── */
+div[data-testid="stNumberInput"] > label {
+    font-size: 0.82rem !important;
+    color: #666 !important;
 }
 
 </style>
