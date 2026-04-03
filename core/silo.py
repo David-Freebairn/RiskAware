@@ -178,7 +178,7 @@ def _parse_patched_point(text: str, station_id: int) -> pd.DataFrame:
             continue
         # Looks like a header if it has 'date' or 'rain' in a field
         tokens = [t.strip().lower() for t in low.replace("\t", ",").split(",")]
-        if any(t in ("date", "yyyy", "yyyymmdd") for t in tokens):
+        if any(t in ("date", "yyyy", "yyyymmdd", "yyyy-mm-dd") for t in tokens):
             header_idx = i
             break
         if any("rain" in t and "source" not in t for t in tokens):
@@ -212,7 +212,7 @@ def _parse_patched_point(text: str, station_id: int) -> pd.DataFrame:
 
     # ── Identify the date column ──────────────────────────────────────────
     date_col = None
-    for candidate in ("date", "yyyy", "yyyymmdd"):
+    for candidate in ("date", "yyyy", "yyyymmdd", "yyyy-mm-dd"):
         if candidate in raw_df.columns:
             date_col = candidate
             break
