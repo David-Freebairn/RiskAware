@@ -336,43 +336,35 @@ if run_btn and selected_station:
             Patch(color=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
         ], fontsize=9, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
         fig.tight_layout(pad=1.1)
-        # ── HTML summary card ─────────────────────────────────────────────
+        # ── Summary card ──────────────────────────────────────────────────
         ann_mean = round(df["rain"].groupby(df.index.year).sum().mean())
-        st.markdown(f"""
-<div style="border:1px solid #c8d8ec; border-radius:10px; overflow:hidden; margin-bottom:1rem;">
-  <div style="background:#2979c4; padding:0.6rem 1.2rem; text-align:center;">
-    <span style="color:white; font-size:1rem; font-weight:700; letter-spacing:0.03em;">
-      What are the odds? &nbsp;·&nbsp; Rain frequency summary
-    </span>
-  </div>
-  <div style="padding:1rem 1.4rem;">
-    <div style="font-size:1.25rem; font-weight:800; color:#0b1f3a; margin-bottom:0.2rem;">
-      {name}
-    </div>
-    <div style="font-size:0.9rem; color:#4a6e94; margin-bottom:0.1rem;">
-      Season: {slabel} &nbsp;&nbsp;&nbsp; Record: {yr_from}–{yr_to}
-    </div>
-    <div style="font-size:0.85rem; color:#6a8aaa; margin-bottom:0.8rem;">
-      Annual mean rainfall {ann_mean}mm
-    </div>
-    <hr style="border-color:#d0dcea; margin:0.5rem 0;">
-    <div style="font-size:0.9rem; color:#5a7a9a; margin-bottom:1rem;">
-      Query: &nbsp; ≥ {int(threshold)} mm rain within any {int(win_days)}-day window &nbsp;·&nbsp; {slabel}
-    </div>
-    <div style="display:flex; align-items:center; gap:2rem;">
-      <div style="flex:1; text-align:center;">
-        <div style="font-size:2rem; font-weight:800; color:#0b1f3a;">{n_exceed} of {n} years</div>
-        <div style="font-size:0.9rem; color:#6a8aaa; margin-top:4px;">met or exceeded the threshold</div>
-      </div>
-      <div style="width:1px; background:#d0dcea; align-self:stretch;"></div>
-      <div style="flex:0 0 160px; text-align:center;">
-        <div style="font-size:3.5rem; font-weight:900; color:#2979c4; line-height:1;">{int(round(pct))}%</div>
-        <div style="font-size:0.85rem; color:#8aaac4; margin-top:4px;">exceedance frequency</div>
-      </div>
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+        query_str = f">= {int(threshold)} mm rain in any {int(win_days)}-day window · {slabel}"
+
+        st.markdown(f"**{name}**")
+        st.markdown(f"**{yr_from}–{yr_to}** period")
+        st.markdown(f"Annual mean **{ann_mean} mm**")
+        st.markdown(f"Season: {slabel}")
+        st.markdown(f"Query: {query_str}")
+
+        col_l, col_r = st.columns([2, 1])
+        with col_l:
+            st.markdown(
+                f"<div style='font-size:1.6rem; font-weight:800; color:#0b1f3a; "
+                f"padding:1rem; background:#EBF2FB; border-radius:8px; "
+                f"border-left:5px solid #2979c4;'>"
+                f"{n_exceed} of {n} years met or exceeded the threshold"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+        with col_r:
+            st.markdown(
+                f"<div style='font-size:3rem; font-weight:900; color:#2979c4; "
+                f"text-align:center; padding:1rem; background:#EBF2FB; border-radius:8px;'>"
+                f"{int(round(pct))}%"
+                f"<div style='font-size:0.8rem; color:#8aaac4; font-weight:400;'>exceedance frequency</div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
 
         # ── Bar chart ─────────────────────────────────────────────────────
         st.pyplot(fig)
