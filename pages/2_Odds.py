@@ -265,15 +265,13 @@ if run_btn and selected_station:
         n_exceed   = int(np.sum(rain >= threshold))
         pct        = n_exceed / n * 100
 
-ann_mean = round(df.groupby("year")["rain"].sum().mean())
-        col_a, col_b = st.columns([3, 1])
-        with col_a:
-            st.markdown(f"**{name}**")
-            st.markdown(f"**{yr_from}–{yr_to}** period  ·  Annual mean **{ann_mean} mm**")
-            st.markdown(f"Query: ≥ **{int(threshold)} mm** rain in any **{int(win_days)}-day** window  ·  {slabel}")
-            st.markdown(f"### {n_exceed} of {n} years met or exceeded the threshold")
-        with col_b:
-            st.metric("Exceedance frequency", f"{int(round(pct))}%")
+        ann_mean = round(df.groupby("year")["rain"].sum().mean())
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Station", name)
+        c2.metric("Period", f"{yr_from}–{yr_to}")
+        c3.metric("Years exceeded", f"{n_exceed} of {n}")
+        c4.metric("Exceedance frequency", f"{int(round(pct))}%")
+        st.caption(f"Query: >= {int(threshold)} mm rain in any {int(win_days)}-day window . {slabel} . Annual mean {ann_mean} mm")
 
         # Chart
         NAVY = "#0b1f3a"; BLUE = "#2979c4"; BRIGHT = "#4da6ff"
