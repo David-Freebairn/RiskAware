@@ -100,7 +100,7 @@ def season_label(sm, sd, em, ed):
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.title("🎲 What are the odds?")
-st.caption("*Rainfall frequency analysis — how often has it happened before?*")
+st.caption("*Probability analysis — how often has it happened before?*")
 
 # ── Panel 1 — Site ────────────────────────────────────────────────────────────
 def do_search():
