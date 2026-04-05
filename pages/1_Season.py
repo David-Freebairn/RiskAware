@@ -29,7 +29,7 @@ from datetime import date, timedelta
 from calendar import monthrange
 
 from core.silo import search_stations, fetch_station_rainfall
-from core.styles import apply_styles
+from core.styles import apply_styles, save_station, load_station
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -282,10 +282,18 @@ def ordinal(n: int) -> str:
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
-st.markdown("""
-<div class="page-title">📈 How's the season?</div>
-<div class="page-subtitle">Comparing this season's rainfall against all years on record</div>
-""", unsafe_allow_html=True)
+st.title("📈 How's the season?")
+st.caption("*Comparing this season's rainfall against all years on record*")
+
+# ── Pre-populate search from shared station ───────────────────────────────────
+_shared = load_station()
+if _shared and not st.session_state.get("se_query"):
+    st.session_state["se_query"]      = _shared.get("name", "")
+    st.session_state["se_saved"]      = _shared
+    st.session_state["se_stations"]   = [_shared]
+    st.session_state["se_last_query"] = _shared.get("name", "")
+    st.session_state["se_confirmed"]  = True
+    st.session_state["se_chosen"]     = _shared.get("label", "")
 
 # ── Step 1: Select site ───────────────────────────────────────────────────────
 with st.container(border=True):
@@ -324,6 +332,7 @@ with st.container(border=True):
                 st.success(f"✅ {labels[0]}")
                 station_info = stations[0]
                 st.session_state["se_saved"] = station_info
+                save_station(station_info)
             else:
                 confirmed = st.session_state.get("se_confirmed", False)
                 chosen    = st.session_state.get("se_chosen") or labels[0]
@@ -351,6 +360,7 @@ with st.container(border=True):
                     st.session_state["se_chosen"] = chosen
                     station_info = next(s for s in stations if s["label"] == chosen)
                 st.session_state["se_saved"] = station_info
+                save_station(station_info)
         elif st.session_state.get("se_last_query"):
             st.warning("No stations found — try a shorter name.")
 
@@ -381,7 +391,7 @@ with col_c:
 if run_clicked or st.session_state.get("se_result"):
     if run_clicked:
         if station_info is None:
-            station_info = st.session_state.get("se_saved")
+            station_info = st.session_state.get("se_saved") or load_station()
         if station_info is None:
             st.error("Please select a station.")
             st.stop()
@@ -413,19 +423,12 @@ if run_clicked or st.session_state.get("se_result"):
         name = res["name"]
         station_info = res.get("station_info", {})
 
-    # Summary chips
+    # Run analysis
     ann_totals = df.groupby(df.index.year)["rain"].sum()
     data_years = sorted(df.index.year.unique())
-    st.markdown(f"""
-    <div class="chip-row">
-      <div class="chip"><b>{name}</b></div>
-      <div class="chip"><b>{data_years[0]}–{data_years[-1]}</b> period</div>
-      <div class="chip">Annual mean <b>{int(ann_totals.mean())} mm</b></div>
-      <div class="chip">Annual max <b>{int(ann_totals.max())} mm</b></div>
-    </div>
-    """, unsafe_allow_html=True)
+    min_y, max_y = data_years[0], data_years[-1]
+    ann_mean = int(ann_totals.mean())
 
-    # Run analysis
     with st.spinner("Analysing..."):
         series, current_year, median_ser, pctile, diff_mm, stats = build_series(
             df, int(months_back)
@@ -439,44 +442,169 @@ if run_clicked or st.session_state.get("se_result"):
         st.warning("Not enough comparable years to calculate a percentile.")
         st.stop()
 
-    # Result headline
-    diff_cls  = "diff-above" if diff_mm >= 0 else "diff-below"
     diff_sign = "+" if diff_mm >= 0 else ""
     diff_dir  = "above" if diff_mm >= 0 else "below"
-    min_y, max_y = data_years[0], data_years[-1]
+    abs_diff  = abs(diff_mm)
 
+    # ── Season's comparison header (matches Probability analysis style) ──────
     st.markdown(f"""
-    <div class="result-headline">
-      Current rainfall looking back <b>{months_back} month{'s' if months_back != 1 else ''}</b>
-      is in the &nbsp;<span class="rank">{ordinal(pctile)} percentile</span>
-      &nbsp;<span class="{diff_cls}">({diff_sign}{diff_mm} mm {diff_dir} avg)</span>
-      <br>
-      <span class="r-site">{name} &nbsp;&nbsp; ({min_y}–{max_y})</span>
-    </div>
-    """, unsafe_allow_html=True)
+<div style="background:#f0f6ff; border-radius:10px; padding:18px 22px 14px 22px; margin-bottom:4px;">
+  <div style="font-size:1.45rem; font-weight:700; color:#1a3a5c; margin-bottom:2px;">
+    Season's comparison
+  </div>
+  <div style="font-size:0.95rem; color:#444; margin-bottom:10px;">
+    <b>{name}</b>&nbsp;&nbsp;
+    <span style="color:#888;">({min_y}–{max_y})</span>&nbsp;&nbsp;
+    Mean annual rainfall <b>{ann_mean} mm</b>
+  </div>
+  <div style="display:flex; align-items:baseline; gap:0; flex-wrap:wrap;">
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">Rainfall in the last&nbsp;</span>
+    <span style="font-size:1.02rem; color:#e06b00; font-weight:700;">{months_back} month{"s" if months_back != 1 else ""}</span>
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">&nbsp;is in the&nbsp;</span>
+    <span style="font-size:1.02rem; color:#2979c4; font-weight:700;">{pctile} %ile</span>
+    <span style="font-size:1.02rem; color:#888; font-weight:400;">&nbsp;( {abs_diff} mm {diff_dir} the average )</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-    # Chart
+    # Chart — remove old suptitle, use clean subtitle inside axes instead
     fig = make_chart(series, current_year, median_ser, name,
                      int(months_back), int(start_year))
 
-    # Add suptitle for export
-    today_label = date.today().strftime("%d %b %Y")
-    fig.suptitle(
-        f"{name}  ·  Last {months_back} months  ·  "
-        f"{ordinal(pctile)} percentile  ·  {diff_sign}{diff_mm} mm {diff_dir} avg  ·  {today_label}",
-        fontsize=9, color="#555", y=1.01,
-    )
+    # Replace the ax title with a cleaner subtitle style (patch the axes object)
+    ax = fig.axes[0]
+    ax.set_title("")  # clear the left-aligned title set in make_chart
+    ax.text(0.5, 1.012,
+            f"{name.upper()}  ·  last {months_back} months  ·  {min_y}–{max_y}",
+            transform=ax.transAxes, ha="center", va="bottom",
+            fontsize=9, color="#5a7a9a")
 
     st.pyplot(fig, use_container_width=True)
 
-    # Export
+    # ── Composite JPEG download (header panel + chart) ─────────────────────
+    import matplotlib.gridspec as _gs
+    import matplotlib.patches as _mp
+
+    PANEL_H = 1.5
+    CHART_H = 4.5
+    DPI     = 150
+
+    comp_fig = plt.figure(figsize=(12, PANEL_H + CHART_H), facecolor="white")
+    spec = _gs.GridSpec(2, 1, figure=comp_fig,
+                        height_ratios=[PANEL_H, CHART_H], hspace=0.0)
+
+    # ── Header panel ──────────────────────────────────────────────────────
+    hax = comp_fig.add_subplot(spec[0])
+    hax.set_facecolor("#f0f6ff")
+    hax.set_xlim(0, 1); hax.set_ylim(0, 1)
+    hax.axis("off")
+
+    hax.text(0.012, 0.95, "Season's comparison",
+             ha="left", va="top", fontsize=14, fontweight="bold", color="#1a3a5c",
+             transform=hax.transAxes)
+    hax.text(0.012, 0.68,
+             f"{name}    ({min_y}–{max_y})    Mean annual rainfall {ann_mean} mm",
+             ha="left", va="top", fontsize=9.5, color="#444",
+             transform=hax.transAxes)
+
+    # Sentence with colour-coded spans
+    parts = [
+        ("Rainfall in the last ", "#444", False),
+        (f"{months_back} month{'s' if months_back != 1 else ''}", "#e06b00", True),
+        (" is in the ", "#444", False),
+        (f"{pctile} %ile", "#2979c4", True),
+        (f"  ( {abs_diff} mm {diff_dir} the average )", "#888", False),
+    ]
+    comp_fig.canvas.draw()
+    renderer = comp_fig.canvas.get_renderer()
+    ax_bbox  = hax.get_window_extent(renderer=renderer)
+    x_cur = 0.012
+    y_row = 0.28
+    for txt, col, bold in parts:
+        t = hax.text(x_cur, y_row, txt,
+                     ha="left", va="top", fontsize=10.5,
+                     fontweight="bold" if bold else "normal",
+                     color=col, transform=hax.transAxes)
+        comp_fig.canvas.draw()
+        bb = t.get_window_extent(renderer=renderer)
+        x_cur += bb.width / ax_bbox.width
+
+    # ── Chart panel ───────────────────────────────────────────────────────
+    C_HIST    = "#7ab4d8"
+    C_MEDIAN  = "#1a4a6e"
+    C_CURRENT = "#cc2200"
+    C_BG      = "#ffffff"
+    C_GRID    = "#e0e8f0"
+
+    import matplotlib.dates as _mdates
+    import matplotlib.ticker as _ticker
+
+    cax = comp_fig.add_subplot(spec[1])
+    cax.set_facecolor(C_BG)
+
+    current = series[current_year]
+    for ey, s in series.items():
+        if ey == current_year:
+            continue
+        n = min(len(s), len(current))
+        cax.plot(current.index[:n], s.values[:n],
+                 color=C_HIST, lw=0.9, alpha=0.45, zorder=1)
+
+    if median_ser is not None:
+        cax.plot(median_ser.index, median_ser.values,
+                 color=C_MEDIAN, lw=2, ls="--", zorder=3)
+        last_valid = median_ser.dropna()
+        if len(last_valid):
+            cax.annotate("median",
+                         xy=(last_valid.index[-1], last_valid.iloc[-1]),
+                         xytext=(6, 0), textcoords="offset points",
+                         fontsize=8, color=C_MEDIAN, va="center")
+
+    cax.plot(current.index, current.values,
+             color=C_CURRENT, lw=2.5, zorder=4)
+    cax.plot(current.index[-1], current.values[-1],
+             "o", color=C_CURRENT, ms=7, mfc="none", mew=2, zorder=5)
+    cax.axvline(current.index[-1], color="#888", lw=1, ls=":", zorder=2)
+
+    cax.set_ylabel("Cumulative rainfall (mm)", fontsize=9.5, color="#555")
+    cax.set_ylim(bottom=0)
+    cax.yaxis.set_major_locator(_ticker.MaxNLocator(nbins=5, integer=True))
+    cax.tick_params(labelsize=8.5)
+    cax.grid(axis="y", color=C_GRID, lw=0.7, zorder=0)
+
+    n_months = int(months_back)
+    if n_months <= 14:
+        cax.xaxis.set_major_locator(_mdates.MonthLocator())
+        cax.xaxis.set_major_formatter(_mdates.DateFormatter("%b\n%Y"))
+    elif n_months <= 30:
+        cax.xaxis.set_major_locator(_mdates.MonthLocator(bymonth=[1,4,7,10]))
+        cax.xaxis.set_major_formatter(_mdates.DateFormatter("%b %Y"))
+    else:
+        cax.xaxis.set_major_locator(_mdates.MonthLocator(bymonth=[1,7]))
+        cax.xaxis.set_major_formatter(_mdates.DateFormatter("%b %Y"))
+
+    plt.setp(cax.xaxis.get_majorticklabels(), ha="center")
+    for sp in ["top", "right"]:
+        cax.spines[sp].set_visible(False)
+    cax.spines["left"].set_linewidth(0.8)
+    cax.spines["bottom"].set_linewidth(0.8)
+
+    cax.text(0.5, 1.012,
+             f"{name.upper()}  ·  last {months_back} months  ·  {min_y}–{max_y}",
+             transform=cax.transAxes, ha="center", va="bottom",
+             fontsize=8.5, color="#5a7a9a")
+
+    comp_fig.tight_layout(pad=0.8)
+
     buf = io.BytesIO()
-    fig.savefig(buf, format="jpeg", dpi=150, bbox_inches="tight", facecolor="white")
+    comp_fig.savefig(buf, format="jpeg", dpi=DPI, bbox_inches="tight", facecolor="white")
     buf.seek(0)
+    plt.close(comp_fig)
+    plt.close(fig)
+
     st.download_button(
         "⬇  Export JPEG",
         data=buf,
         file_name=f"season_{name.replace(' ', '_')}_{months_back}mo.jpg",
         mime="image/jpeg",
     )
-    plt.close(fig)
