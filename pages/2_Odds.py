@@ -25,7 +25,7 @@ MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec
 
 apply_styles()
 
- 
+
 # ── Session state ─────────────────────────────────────────────────────────────
 for key, default in [
     ("df", None), ("station_name", None), ("stations", []),
@@ -266,19 +266,50 @@ if run_btn and selected_station:
         pct        = n_exceed / n * 100
 
         ann_mean = round(df.groupby("year")["rain"].sum().mean())
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Station", name)
-        c2.metric("Period", f"{yr_from}–{yr_to}")
-        c3.metric("Years exceeded", f"{n_exceed} of {n}")
-        c4.metric("Exceedance frequency", f"{int(round(pct))}%")
-        st.caption(f"Query: >= {int(threshold)} mm rain in any {int(win_days)}-day window . {slabel} . Annual mean {ann_mean} mm")
 
-        # Chart
+        # ── Probability analysis header (matches target layout) ───────────
+        pct_display = int(round(pct))
+        st.markdown(f"""
+<div style="background:#f0f6ff; border-radius:10px; padding:18px 22px 14px 22px; margin-bottom:4px;">
+  <div style="font-size:1.45rem; font-weight:700; color:#1a3a5c; margin-bottom:6px;">
+    Probability analysis
+  </div>
+  <div style="display:flex; align-items:baseline; gap:0; flex-wrap:wrap;">
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">
+      Rainfall exceeded&nbsp;
+    </span>
+    <span style="font-size:1.02rem; color:#e06b00; font-weight:700;">{int(threshold)} mm</span>
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">
+      &nbsp;in&nbsp;
+    </span>
+    <span style="font-size:1.02rem; color:#e06b00; font-weight:700;">{int(win_days)} days</span>
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">
+      &nbsp;between&nbsp;
+    </span>
+    <span style="font-size:1.02rem; color:#2979c4; font-weight:600;">{sd_i} {MONTHS[sm-1]}</span>
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">&nbsp;and&nbsp;</span>
+    <span style="font-size:1.02rem; color:#2979c4; font-weight:600;">{ed_i} {MONTHS[em-1]}</span>
+    <span style="flex:1; min-width:20px;"></span>
+    <span style="font-size:1.5rem; font-weight:800; color:#0b1f3a;">
+      {pct_display}%&nbsp;<span style="font-size:1.02rem; font-weight:500; color:#444;">of years</span>
+    </span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+        # ── Chart ─────────────────────────────────────────────────────────
         NAVY = "#0b1f3a"; BLUE = "#2979c4"; BRIGHT = "#4da6ff"
         MISS = "#b8cfe8"; BG = "#f7fafd"; GRID = "#dde5ee"
 
         fig, ax = plt.subplots(figsize=(14, 4.0))
         fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
+
+        # Subtitle inside chart (top-centre, replacing ax.set_title)
+        ax.text(0.5, 1.015,
+                f"{name.upper()}  ·  {sd_i} {MONTHS[sm-1]} – {ed_i} {MONTHS[em-1]}"
+                f"  ·  {int(win_days)}-day window  ·  {yr_from}–{yr_to}",
+                transform=ax.transAxes, ha="center", va="bottom",
+                fontsize=9.5, color="#5a7a9a", fontstyle="normal")
 
         colours = [BRIGHT if r >= threshold else MISS for r in annual_max["max_roll_mm"]]
         bars = ax.bar(annual_max["season_year"], annual_max["max_roll_mm"],
@@ -288,25 +319,30 @@ if run_btn and selected_station:
                 bar.set_edgecolor(BLUE); bar.set_linewidth(0.8)
 
         ax.axhline(threshold, color=NAVY, lw=1.8, ls="--", zorder=4)
-        ax.text(annual_max["season_year"].max() + 0.5,
-                threshold + rain.max() * 0.018,
-                f"▶  {int(threshold)} mm",
-                color=NAVY, fontsize=9.5, va="bottom",
-                fontweight="bold", fontfamily="monospace")
+
+        # Threshold label — right-aligned, just above the dashed line
+        x_right = annual_max["season_year"].max()
+        ax.annotate(
+            f"{int(threshold)} mm",
+            xy=(x_right, threshold),
+            xytext=(6, 4), textcoords="offset points",
+            fontsize=9.5, color=NAVY, fontweight="bold",
+            va="bottom", ha="left",
+            annotation_clip=False,
+        )
 
         ax.set_xlabel("Season year", fontsize=10, color="#3a5a7a", labelpad=6)
         ax.set_ylabel(f"Max {int(win_days)}-day rainfall  (mm)",
                       fontsize=10, color="#3a5a7a", labelpad=6)
         ax.tick_params(colors="#3a5a7a", labelsize=9)
-        if n > 30: ax.tick_params(axis="x", rotation=45)
+        if n > 30:
+            ax.tick_params(axis="x", rotation=45)
         ax.grid(True, axis="y", color=GRID, lw=0.9, zorder=0)
         ax.set_axisbelow(True)
-        for sp in ["top", "right", "left"]: ax.spines[sp].set_visible(False)
+        for sp in ["top", "right", "left"]:
+            ax.spines[sp].set_visible(False)
         ax.spines["bottom"].set_color(GRID)
-        ax.set_title(
-            f"{name}   ·   {slabel}   ·   {int(win_days)}-day window   ·   {yr_from}–{yr_to}",
-            fontsize=11, fontweight="bold", color=NAVY, pad=10,
-        )
+
         from matplotlib.patches import Patch
         ax.legend(handles=[
             Patch(color=BRIGHT, edgecolor=BLUE, linewidth=0.8,
@@ -314,7 +350,6 @@ if run_btn and selected_station:
             Patch(color=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
         ], fontsize=9, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
         fig.tight_layout(pad=1.1)
-
 
         # ── Bar chart ─────────────────────────────────────────────────────
         st.pyplot(fig)
@@ -384,9 +419,9 @@ if run_btn and selected_station:
             )
         with dl2:
             st.download_button(
-                "🖼️  Download summary",
+                "🖼️  Download summary image",
                 data=jpeg_buf,
-                file_name=f"Odds_summary_{name.replace(' ', '_')}.jpg",
+                file_name=f"rain_summary_{name.replace(' ', '_')}.jpg",
                 mime="image/jpeg",
             )
 
