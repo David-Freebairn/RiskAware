@@ -351,16 +351,123 @@ if run_btn and selected_station:
         ], fontsize=9, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
         fig.tight_layout(pad=1.1)
 
-        # ── Save chart as JPEG for download (before closing fig) ──────────
-        import io as _io
-        jpeg_buf = _io.BytesIO()
-        fig.savefig(jpeg_buf, format="jpeg", dpi=150,
-                    bbox_inches="tight", facecolor=BG)
-        jpeg_buf.seek(0)
-
-        # ── Bar chart ─────────────────────────────────────────────────────
+        # ── Bar chart on screen ───────────────────────────────────────────
         st.pyplot(fig)
         plt.close(fig)
+
+        # ── Build composite JPEG: header panel + chart ────────────────────
+        import io as _io
+        from matplotlib.patches import Patch as _Patch
+        import matplotlib.gridspec as _gs
+
+        PANEL_H = 1.4   # header panel height in inches
+        CHART_H = 4.0
+        DPI     = 150
+
+        comp_fig = plt.figure(figsize=(14, PANEL_H + CHART_H), facecolor="white")
+        spec = _gs.GridSpec(2, 1, figure=comp_fig,
+                            height_ratios=[PANEL_H, CHART_H],
+                            hspace=0.0)
+
+        # ── Top panel: header ─────────────────────────────────────────────
+        hax = comp_fig.add_subplot(spec[0])
+        hax.set_facecolor("#f0f6ff")
+        hax.set_xlim(0, 1); hax.set_ylim(0, 1)
+        hax.axis("off")
+
+        # Station / period / mean info (top-left, small)
+        hax.text(0.012, 0.97, f"✅ {name}",
+                 ha="left", va="top", fontsize=9, fontweight="bold", color="#0b1f3a",
+                 transform=hax.transAxes)
+        hax.text(0.012, 0.78, f"{yr_from}–{yr_to} period",
+                 ha="left", va="top", fontsize=8.5, color="#444",
+                 transform=hax.transAxes)
+        hax.text(0.012, 0.60, f"Annual mean {ann_mean} mm",
+                 ha="left", va="top", fontsize=8.5, fontweight="bold", color="#444",
+                 transform=hax.transAxes)
+
+        # "Probability analysis" title
+        hax.text(0.012, 0.36, "Probability analysis",
+                 ha="left", va="top", fontsize=13, fontweight="bold", color="#1a3a5c",
+                 transform=hax.transAxes)
+
+        # Sentence line
+        parts = [
+            ("Rainfall exceeded ", "#444", False),
+            (f"{int(threshold)} mm", "#e06b00", True),
+            (" in ", "#444", False),
+            (f"{int(win_days)} days", "#e06b00", True),
+            (" between ", "#444", False),
+            (f"{sd_i} {MONTHS[sm-1]}", "#2979c4", True),
+            (" and ", "#444", False),
+            (f"{ed_i} {MONTHS[em-1]}", "#2979c4", True),
+        ]
+        x_cur = 0.012
+        y_row = 0.10
+        for txt, col, bold in parts:
+            t = hax.text(x_cur, y_row, txt,
+                         ha="left", va="top", fontsize=10,
+                         fontweight="bold" if bold else "normal",
+                         color=col, transform=hax.transAxes)
+            comp_fig.canvas.draw()
+            bb = t.get_window_extent(renderer=comp_fig.canvas.get_renderer())
+            x_cur += bb.width / (comp_fig.get_figwidth() * DPI)
+
+        # Pct of years — right-aligned
+        hax.text(0.988, 0.10,
+                 f"{pct_display}% of years",
+                 ha="right", va="top", fontsize=13, fontweight="bold", color="#0b1f3a",
+                 transform=hax.transAxes)
+
+        # ── Bottom panel: chart ───────────────────────────────────────────
+        cax = comp_fig.add_subplot(spec[1])
+        cax.set_facecolor(BG)
+
+        cax.text(0.5, 1.012,
+                 f"{name.upper()}  ·  {sd_i} {MONTHS[sm-1]} – {ed_i} {MONTHS[em-1]}"
+                 f"  ·  {int(win_days)}-day window  ·  {yr_from}–{yr_to}",
+                 transform=cax.transAxes, ha="center", va="bottom",
+                 fontsize=8.5, color="#5a7a9a")
+
+        colours2 = [BRIGHT if r >= threshold else MISS for r in annual_max["max_roll_mm"]]
+        bars2 = cax.bar(annual_max["season_year"], annual_max["max_roll_mm"],
+                        color=colours2, width=0.72, zorder=3, linewidth=0, alpha=0.95)
+        for bar, r in zip(bars2, annual_max["max_roll_mm"]):
+            if r >= threshold:
+                bar.set_edgecolor(BLUE); bar.set_linewidth(0.8)
+
+        cax.axhline(threshold, color=NAVY, lw=1.8, ls="--", zorder=4)
+        cax.annotate(
+            f"{int(threshold)} mm",
+            xy=(annual_max["season_year"].max(), threshold),
+            xytext=(6, 4), textcoords="offset points",
+            fontsize=9, color=NAVY, fontweight="bold",
+            va="bottom", ha="left", annotation_clip=False,
+        )
+
+        cax.set_xlabel("Season year", fontsize=9.5, color="#3a5a7a", labelpad=5)
+        cax.set_ylabel(f"Max {int(win_days)}-day rainfall  (mm)", fontsize=9.5, color="#3a5a7a", labelpad=5)
+        cax.tick_params(colors="#3a5a7a", labelsize=8.5)
+        if n > 30:
+            cax.tick_params(axis="x", rotation=45)
+        cax.grid(True, axis="y", color=GRID, lw=0.9, zorder=0)
+        cax.set_axisbelow(True)
+        for sp in ["top", "right", "left"]:
+            cax.spines[sp].set_visible(False)
+        cax.spines["bottom"].set_color(GRID)
+        cax.legend(handles=[
+            _Patch(color=BRIGHT, edgecolor=BLUE, linewidth=0.8,
+                   label=f"≥ {int(threshold)} mm  ({n_exceed} yrs)"),
+            _Patch(color=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
+        ], fontsize=8.5, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
+
+        comp_fig.tight_layout(pad=0.8)
+
+        jpeg_buf = _io.BytesIO()
+        comp_fig.savefig(jpeg_buf, format="jpeg", dpi=DPI,
+                         bbox_inches="tight", facecolor="white")
+        jpeg_buf.seek(0)
+        plt.close(comp_fig)
 
         # ── Download button ────────────────────────────────────────────────
         st.download_button(
