@@ -12,11 +12,11 @@ fetch_station_met(station_id, start, end)      -> pd.DataFrame
 
 WAF note
 --------
-SILO's firewall blocks requests where the 'comment' parameter has
-URL-encoded commas (%2C). The fix is to build the URL manually so
-commas stay as literal characters. The requests library always
-encodes commas; urllib.request.urlopen with a hand-built URL string
-does not — so we use that here.
+The SILO WAF rejects requests where the comment parameter contains
+URL-encoded commas (%2C). The fix is to urlencode everything EXCEPT
+the comment parameter, then append &comment=... manually so its
+commas remain as literal characters. This mirrors the approach used
+in app.py line 841.
 """
 
 import urllib.parse
@@ -39,20 +39,45 @@ _HEADERS = {
     "Referer": "https://www.longpaddock.qld.gov.au/silo/",
 }
 
-# All variables — commas must stay literal in the URL (not %2C)
+# All variables we need — appended raw so commas are NOT percent-encoded
 _VARIABLES = "daily_rain,max_temp,min_temp,evap_pan,radiation"
+
+
+# ── URL builder ───────────────────────────────────────────────────────────────
+
+def _build_url(params: dict, comment: str) -> str:
+    """
+    Build a SILO URL where the comment parameter is appended AFTER
+    urlencode so its commas stay as literal characters (not %2C).
+    The WAF rejects requests with %2C in the comment field.
+    """
+    base = urllib.parse.urlencode(params)
+    return f"{_BASE}?{base}&comment={comment}"
+
+
+def _fetch_url(url: str) -> str:
+    req = urllib.request.Request(url, headers=_HEADERS)
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+    if "<html" in raw.lower()[:200]:
+        raise RuntimeError(f"SILO WAF rejected request.\nURL: {url}\nResponse: {raw[:300]}")
+    return raw
 
 
 # ── Station search ───────────────────────────────────────────────────────────
 
 def search_stations(query: str) -> list:
-    url = (f"{_BASE}?format=name"
-           f"&nameFrag={urllib.parse.quote(query.strip())}"
-           f"&username={urllib.parse.quote(_EMAIL)}")
+    """Search SILO for stations matching a name fragment."""
+    url = _build_url({
+        "format":   "name",
+        "nameFrag": query.strip(),
+        "username": _EMAIL,
+    }, comment="")
+    # search doesn't use comment — strip trailing &comment=
+    url = url.replace("&comment=", "")
+
     try:
-        req = urllib.request.Request(url, headers=_HEADERS)
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
+        raw = _fetch_url(url)
     except Exception as exc:
         raise RuntimeError(f"SILO station search failed: {exc}") from exc
 
@@ -88,40 +113,33 @@ def fetch_station_met(station_id: int, start: str, end: str) -> pd.DataFrame:
     """
     Fetch SILO patched-point data for a station.
 
-    Builds the URL manually so commas in the comment parameter are NOT
-    percent-encoded. Encoding them as %2C triggers the SILO WAF.
+    Builds URL with urlencode for all params EXCEPT comment, which is
+    appended manually to avoid %2C encoding that triggers the WAF.
     """
-    base_params = (
-        f"station={station_id}"
-        f"&start={start}"
-        f"&finish={end}"
-        f"&format=csv"
-        f"&comment={_VARIABLES}"
-        f"&username={urllib.parse.quote(_EMAIL)}"
-        f"&password=apirequest"
-    )
-    url = f"{_BASE}?{base_params}"
+    base_params = {
+        "station":  station_id,
+        "start":    start,
+        "finish":   end,
+        "format":   "csv",
+        "username": _EMAIL,
+        "password": "apirequest",
+    }
+    url = _build_url(base_params, _VARIABLES)
 
     try:
-        req = urllib.request.Request(url, headers=_HEADERS)
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
+        raw = _fetch_url(url)
     except Exception as exc:
         raise RuntimeError(
             f"SILO fetch failed for station {station_id}: {exc}"
         ) from exc
 
-    if "<html" in raw.lower()[:200]:
-        raise RuntimeError(
-            f"SILO WAF rejected request for station {station_id}.\n"
-            f"Response: {raw[:300]}"
-        )
-
     return _parse(raw, station_id)
 
 
 def _parse(raw: str, station_id: int) -> pd.DataFrame:
+    """Parse SILO CSV — handles YYYYMMDD and YYYY-MM-DD date formats."""
     lines = raw.splitlines()
+
     hi = next(
         (i for i, ln in enumerate(lines)
          if ln.strip().lower().startswith("date") or
@@ -174,7 +192,7 @@ def _parse(raw: str, station_id: int) -> pd.DataFrame:
     out["rain"] = out["rain"].fillna(0.0).clip(lower=0.0)
     out["epan"] = out["epan"].fillna(0.0)
 
-    # Fallback: estimate epan from radiation if missing
+    # Fallback: estimate epan from radiation if still missing
     if out["epan"].sum() < 1.0:
         try:
             rs    = out["radiation"].fillna(out["radiation"].median())
