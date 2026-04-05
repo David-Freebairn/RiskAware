@@ -39,8 +39,9 @@ _HEADERS = {
     "Referer": "https://www.longpaddock.qld.gov.au/silo/",
 }
 
-# All variables we need — appended raw so commas are NOT percent-encoded
-_VARIABLES = "daily_rain,max_temp,min_temp,evap_pan,radiation"
+# "R" is the SILO shortcode for all standard met variables including evap_pan.
+# Single letter — no commas — never triggers the WAF.
+_VARIABLES = "R"
 
 
 # ── URL builder ───────────────────────────────────────────────────────────────
