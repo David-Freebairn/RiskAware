@@ -33,7 +33,7 @@ from core.silo import search_stations, fetch_station_met
 from core.soil_xml import read_soil_xml
 from core.soil import read_prm, init_sw
 from core.waterbalance import daily_water_balance
-from core.styles import apply_styles
+from core.styles import apply_styles, save_station, load_station
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -271,10 +271,18 @@ def soil_profile_svg(profile, final_pasw, sw_layers=None) -> str:
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
-st.markdown("""
-<div class="page-title">💧 How much rain stored?</div>
-<div class="page-subtitle">Accumulated soil water over a fallow</div>
-""", unsafe_allow_html=True)
+st.title("💧 How much rain stored?")
+st.caption("*Accumulated soil water over a fallow*")
+
+# ── Pre-populate search from shared station ───────────────────────────────────
+_shared = load_station()
+if _shared and not st.session_state.get("hw_query"):
+    st.session_state["hw_query"]      = _shared.get("name", "")
+    st.session_state["hw_saved_station"] = _shared
+    st.session_state["hw_stations"]   = [_shared]
+    st.session_state["hw_last_query"] = _shared.get("name", "")
+    st.session_state["hw_confirmed"]  = True
+    st.session_state["hw_chosen"]     = _shared.get("label", "")
 
 soil_files  = load_soil_files()
 soil_labels = [f.stem for f in soil_files]
@@ -285,12 +293,18 @@ min_start   = today - timedelta(days=MAX_MONTHS_RECENT * 30)
 with st.container(border=True):
     st.markdown('<p class="section-title">Select site</p>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns([1.1, 1.4])
+    col1, col2 = st.columns([2.5, 1.0])
     with col1:
-        st.markdown("Search station")
+        query = st.text_input(
+            "station", label_visibility="collapsed",
+            placeholder="Search station — e.g. Dalby, Emerald  (press Enter)",
+            key="hw_query",
+        )
     with col2:
-        query = st.text_input("station_search", label_visibility="collapsed",
-                              placeholder="e.g. Dalby, Emerald", key="hw_query")
+        start_year_hw = st.number_input(
+            "Records from year", min_value=1889,
+            max_value=date.today().year, value=1980, step=1,
+        )
 
     station_info = None
     if query and len(query) >= 3:
@@ -311,6 +325,7 @@ with st.container(border=True):
                 st.success(f"✅ {labels[0]}")
                 station_info = stations[0]
                 st.session_state["hw_saved_station"] = station_info
+                save_station(station_info)
             else:
                 confirmed = st.session_state.get("hw_confirmed", False)
                 chosen    = st.session_state.get("hw_chosen") or labels[0]
@@ -325,28 +340,30 @@ with st.container(border=True):
                             st.session_state["hw_confirmed"] = False
                     station_info = next(s for s in stations if s["label"] == chosen)
                 else:
-                    st.caption(f"**{len(labels)} stations found** — select one:")
-                    def _hw_pick():
+                    current_index = labels.index(chosen) if chosen in labels else 0
+                    st.caption(f"**{len(labels)} stations found** — click to select:")
+                    def on_station_pick_hw():
                         st.session_state["hw_chosen"]    = st.session_state["hw_radio"]
                         st.session_state["hw_confirmed"] = True
                     chosen = st.radio(
-                        "Station", labels,
-                        index=labels.index(chosen) if chosen in labels else 0,
+                        "Station", options=labels, index=current_index,
                         key="hw_radio", label_visibility="collapsed",
-                        on_change=_hw_pick,
+                        on_change=on_station_pick_hw,
                     )
                     st.session_state["hw_chosen"] = chosen
                     station_info = next(s for s in stations if s["label"] == chosen)
                 st.session_state["hw_saved_station"] = station_info
+                save_station(station_info)
         elif st.session_state.get("hw_last_query"):
-            st.caption("No stations found — try a different name")
+            st.warning("No stations found. Try a shorter search term.")
 
-    st.divider()
+with st.container(border=True):
+    st.markdown('<p class="section-title">Set up query</p>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns([1.1, 1.4])
-    with col1:
-        st.markdown("Soil type")
-    with col2:
+    r1a, r1b, r1c, r1d, r1e, r1f = st.columns([1.6, 1.4, 0.7, 1.6, 0.65, 0.6])
+    with r1a:
+        st.markdown('<span style="font-size:1rem">Soil type</span>', unsafe_allow_html=True)
+    with r1b:
         if soil_labels:
             soil_idx = st.selectbox("soil", range(len(soil_labels)),
                                     format_func=lambda i: soil_labels[i],
@@ -355,24 +372,27 @@ with st.container(border=True):
         else:
             st.error("No .soil files found in data/ folder")
             soil_path = None
-
-    st.divider()
-
-    col1, col2, col3, col4 = st.columns([1.1, 0.9, 0.8, 0.6])
-    with col1:
-        st.markdown("Start of fallow")
-    with col2:
+    with r1c:
+        st.markdown("")
+    with r1d:
+        st.markdown('<span style="font-size:1rem">Start of fallow</span>', unsafe_allow_html=True)
+    with r1e:
         start_date = st.date_input("start", label_visibility="collapsed",
                                    value=today - timedelta(days=180),
                                    min_value=min_start, max_value=yesterday,
                                    format="DD/MM/YYYY", key="hw_start")
-    with col3:
-        st.markdown("How full at start")
-    with col4:
+    with r1f:
+        st.markdown("")
+
+    r2a, r2b, r2c, r2d, r2e, r2f = st.columns([1.6, 1.4, 0.7, 1.6, 0.45, 0.8])
+    with r2a:
+        st.markdown('<span style="font-size:1rem">Soil water at start</span>', unsafe_allow_html=True)
+    with r2b:
         init_pct = st.number_input("init_pct", label_visibility="collapsed",
                                    min_value=0, max_value=100, value=5,
                                    step=5, key="hw_init")
-        st.caption("% of PAWC")
+    with r2c:
+        st.markdown('<span style="font-size:1rem">% of PAWC</span>', unsafe_allow_html=True)
 
 col_l, col_c, col_r = st.columns([1, 2, 1])
 with col_c:
@@ -383,7 +403,7 @@ with col_c:
 # ── Run ───────────────────────────────────────────────────────────────────────
 if run_clicked:
     if station_info is None:
-        station_info = st.session_state.get("hw_saved_station")
+        station_info = st.session_state.get("hw_saved_station") or load_station()
     if station_info is None:
         st.error("Please select a weather station.")
         st.stop()
@@ -464,47 +484,138 @@ if run_clicked:
 
     profile_svg = soil_profile_svg(profile, final_pasw, recent_df["sw_layers"].iloc[-1])
 
-    col_box, col_prof = st.columns([5, 1])
-    with col_box:
-        st.markdown(f"""
-        <div class="result-box">
-            <div class="result-title">
-                Plant available soil water on <span class="date-loc">{end_label}</span>
-                at <span class="loc">{stn_name}</span>
-            </div>
-            <div class="fallow-label">
-                Fallow efficiency &nbsp;<strong>{fe:.0f}%</strong>
-                &nbsp; from &nbsp;<strong>{cum_rain:.0f} mm</strong>&nbsp; rainfall
-                &nbsp;({start_label} to {end_label})
-            </div>
-            <span class="paw-big">{final_pasw:.0f}</span>
-            <span class="paw-unit">mm</span>
-            <span class="pawc-pct">{pawc_pct:.0f}% PAWC</span>
-        </div>
-        """, unsafe_allow_html=True)
+    # ── Soil water header (matches Season/Odds style) ─────────────────────────
+    st.markdown(f"""
+<div style="background:#f0f6ff; border-radius:10px; padding:18px 22px 14px 22px; margin-bottom:4px;">
+  <div style="font-size:1.45rem; font-weight:700; color:#1a3a5c; margin-bottom:2px;">
+    Soil water monitor
+  </div>
+  <div style="font-size:0.95rem; color:#444; margin-bottom:10px;">
+    <b>{stn_name}</b>&nbsp;&nbsp;
+    <span style="color:#888;">{profile.name}</span>&nbsp;&nbsp;·&nbsp;&nbsp;
+    <span style="color:#888;">{start_label} to {end_label}</span>
+  </div>
+  <div style="display:flex; align-items:baseline; gap:0; flex-wrap:wrap;">
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">Plant available soil water&nbsp;</span>
+    <span style="font-size:1.5rem; color:#1a3a5c; font-weight:800;">{final_pasw:.0f} mm</span>
+    <span style="font-size:1.02rem; color:#2979c4; font-weight:700;">&nbsp;({pawc_pct:.0f}% of PAWC)</span>
+    <span style="flex:1; min-width:20px;"></span>
+    <span style="font-size:1.02rem; color:#888; font-weight:400;">Fallow efficiency&nbsp;</span>
+    <span style="font-size:1.02rem; color:#e06b00; font-weight:700;">{fe:.0f}%</span>
+    <span style="font-size:1.02rem; color:#888; font-weight:400;">&nbsp;from {cum_rain:.0f} mm rainfall</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    col_chart, col_prof = st.columns([6, 1])
     with col_prof:
         st.markdown(profile_svg, unsafe_allow_html=True)
+    with col_chart:
+        fig = make_pasw_chart(recent_df, hist_dfs, profile, stn_name, start_date, end_date)
+        ax = fig.axes[0]
+        ax.set_title("")
+        ax.text(0.5, 1.012,
+                f"{stn_name.upper()}  ·  {start_label} – {end_label}  ·  {profile.name}",
+                transform=ax.transAxes, ha="center", va="bottom",
+                fontsize=9, color="#5a7a9a")
+        st.pyplot(fig, use_container_width=True)
 
-    fig = make_pasw_chart(recent_df, hist_dfs, profile, stn_name, start_date, end_date)
-    fig.suptitle(
-        f"Plant available soil water — {stn_name}\n"
-        f"{profile.name}  ·  {start_label} to {end_label}  ·  "
-        f"Fallow efficiency {fe:.0f}%  from {cum_rain:.0f} mm  ·  "
-        f"PAW {final_pasw:.0f} mm  ({pawc_pct:.0f}% PAWC)",
-        fontsize=10, color="#1a2332", y=1.02, ha="center",
-    )
-    st.pyplot(fig)
+    # ── Composite JPEG (header + chart) ───────────────────────────────────────
+    import matplotlib.gridspec as _gs
+    import matplotlib.ticker as _ticker
+    import matplotlib.dates as _mdates
+
+    PANEL_H = 1.5
+    CHART_H = 5.0
+    DPI     = 150
+
+    comp_fig = plt.figure(figsize=(12, PANEL_H + CHART_H), facecolor="white")
+    spec = _gs.GridSpec(2, 1, figure=comp_fig,
+                        height_ratios=[PANEL_H, CHART_H], hspace=0.0)
+
+    hax = comp_fig.add_subplot(spec[0])
+    hax.set_facecolor("#f0f6ff")
+    hax.set_xlim(0, 1); hax.set_ylim(0, 1)
+    hax.axis("off")
+    hax.text(0.012, 0.95, "Soil water monitor",
+             ha="left", va="top", fontsize=14, fontweight="bold", color="#1a3a5c",
+             transform=hax.transAxes)
+    hax.text(0.012, 0.68,
+             f"{stn_name}    {profile.name}    {start_label} to {end_label}",
+             ha="left", va="top", fontsize=9.5, color="#444",
+             transform=hax.transAxes)
+
+    parts = [
+        ("Plant available soil water  ", "#444", False),
+        (f"{final_pasw:.0f} mm", "#1a3a5c", True),
+        (f"  ({pawc_pct:.0f}% of PAWC)", "#2979c4", True),
+        ("      Fallow efficiency  ", "#888", False),
+        (f"{fe:.0f}%", "#e06b00", True),
+        (f"  from {cum_rain:.0f} mm rainfall", "#888", False),
+    ]
+    comp_fig.canvas.draw()
+    renderer = comp_fig.canvas.get_renderer()
+    ax_bbox  = hax.get_window_extent(renderer=renderer)
+    x_cur = 0.012
+    y_row = 0.28
+    for txt, col, bold in parts:
+        t = hax.text(x_cur, y_row, txt,
+                     ha="left", va="top", fontsize=10.5,
+                     fontweight="bold" if bold else "normal",
+                     color=col, transform=hax.transAxes)
+        comp_fig.canvas.draw()
+        bb = t.get_window_extent(renderer=renderer)
+        x_cur += bb.width / ax_bbox.width
+
+    cax = comp_fig.add_subplot(spec[1])
+    cax.set_facecolor("#FAFBFC")
+    n_recent2 = len(recent_df)
+    x_vals2   = recent_df.index
+    hist_aligned2 = []
+    for hdf in hist_dfs:
+        seg = hdf["pasw"].values[:n_recent2]
+        n = min(len(seg), n_recent2)
+        cax.plot(x_vals2[:n], seg[:n], color=C_HIST, lw=0.8, alpha=0.55, zorder=1)
+        hist_aligned2.append(seg[:n])
+    if hist_aligned2:
+        min_len2   = min(len(s) for s in hist_aligned2)
+        mean_pasw2 = np.mean([s[:min_len2] for s in hist_aligned2], axis=0)
+        cax.plot(x_vals2[:min_len2], mean_pasw2, color=C_MEAN, lw=2.2, zorder=3,
+                 label=f"Historical mean ({len(hist_aligned2)} yrs)")
+    cax.plot(recent_df.index, recent_df["pasw"],
+             color=C_RECENT, lw=2.8, zorder=4,
+             label=f"Recent  ({start_label} – {end_label})")
+    cax.axhline(profile.pawc_total, color="#CC4422", lw=0.9, ls="--", alpha=0.6,
+                label=f"PAWC  {profile.pawc_total:.0f} mm", zorder=2)
+    cax.set_ylabel("Plant available soil water (mm)", fontsize=9.5, color="#333")
+    cax.set_ylim(bottom=0)
+    cax.yaxis.set_major_locator(_ticker.MaxNLocator(nbins=6, integer=True))
+    cax.tick_params(labelsize=8.5)
+    cax.grid(axis="y", color="#E0E4EC", lw=0.6, zorder=0)
+    cax.xaxis.set_major_locator(_mdates.MonthLocator())
+    cax.xaxis.set_major_formatter(_mdates.DateFormatter("%d %b\n%Y"))
+    cax.tick_params(axis="x", labelsize=8.5)
+    cax.legend(loc="upper left", fontsize=8.5, frameon=True, framealpha=0.9, edgecolor="#CCCCCC")
+    for sp in ["top", "right"]:
+        cax.spines[sp].set_visible(False)
+    cax.text(0.5, 1.012,
+             f"{stn_name.upper()}  ·  {start_label} – {end_label}  ·  {profile.name}",
+             transform=cax.transAxes, ha="center", va="bottom",
+             fontsize=8.5, color="#5a7a9a")
+    comp_fig.tight_layout(pad=0.8)
 
     buf = io.BytesIO()
-    fig.savefig(buf, format="jpeg", dpi=150, bbox_inches="tight", facecolor=C_BG)
+    comp_fig.savefig(buf, format="jpeg", dpi=DPI, bbox_inches="tight", facecolor="white")
     buf.seek(0)
+    plt.close(comp_fig)
+    plt.close(fig)
+
     st.download_button(
         "⬇  Export JPEG", data=buf,
         file_name=f"SoilWater_{stn_name.replace(' ','_')}_"
                   f"{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.jpg",
         mime="image/jpeg",
     )
-    plt.close(fig)
 
     with st.expander("Water balance details"):
         rain_t = recent_df["rain"].sum()
