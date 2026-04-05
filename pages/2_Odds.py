@@ -129,7 +129,7 @@ with st.container(border=True):
     with col2:
         start_year = st.number_input(
             "Records from year", min_value=1889,
-            max_value=date.today().year, value=1900, step=1,
+            max_value=date.today().year, value=1980, step=1,
         )
     start_date = date(int(start_year), 1, 1)
 
