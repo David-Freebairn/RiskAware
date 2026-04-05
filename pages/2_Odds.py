@@ -351,79 +351,23 @@ if run_btn and selected_station:
         ], fontsize=9, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
         fig.tight_layout(pad=1.1)
 
+        # ── Save chart as JPEG for download (before closing fig) ──────────
+        import io as _io
+        jpeg_buf = _io.BytesIO()
+        fig.savefig(jpeg_buf, format="jpeg", dpi=150,
+                    bbox_inches="tight", facecolor=BG)
+        jpeg_buf.seek(0)
+
         # ── Bar chart ─────────────────────────────────────────────────────
         st.pyplot(fig)
         plt.close(fig)
 
-        # ── Build JPEG summary for download (keep matplotlib version) ─────
-        import io as _io
-        from matplotlib.patches import FancyBboxPatch
-        summary_fig, summary_ax = plt.subplots(figsize=(10, 4.0))
-        summary_fig.patch.set_facecolor("#ffffff")
-        summary_ax.set_facecolor("#ffffff")
-        summary_ax.set_xlim(0, 10); summary_ax.set_ylim(0, 4.0)
-        summary_ax.axis("off")
-        summary_ax.add_patch(FancyBboxPatch((0.08, 0.08), 9.84, 3.84,
-            boxstyle="round,pad=0.12", facecolor="#ffffff",
-            edgecolor="#c8d8ec", linewidth=1.5, zorder=0))
-        summary_ax.add_patch(FancyBboxPatch((0.08, 3.28), 9.84, 0.68,
-            boxstyle="round,pad=0.12", facecolor="#2979c4",
-            edgecolor="none", zorder=1))
-        summary_ax.text(5, 3.62, "What are the odds?   ·   Rain frequency summary",
-            ha="center", va="center", fontsize=12.5, fontweight="bold",
-            color="white", zorder=2)
-        summary_ax.text(0.4, 2.95, name,
-            ha="left", va="center", fontsize=15, fontweight="bold",
-            color="#0b1f3a", zorder=2)
-        summary_ax.text(0.4, 2.6,
-            f"Season: {slabel}     Record: {yr_from}–{yr_to}",
-            ha="left", va="center", fontsize=10.5, color="#4a6e94", zorder=2)
-        summary_ax.plot([0.4, 9.6], [2.38, 2.38], color="#d0dcea", lw=1.0, zorder=2)
-        summary_ax.text(0.4, 2.12,
-            f"Query:  >= {int(threshold)} mm rain within any {int(win_days)}-day window  .  {slabel}",
-            ha="left", va="center", fontsize=10.5, color="#5a7a9a", zorder=2)
-        summary_ax.text(4.2, 1.28, f"{n_exceed} of {n} years",
-            ha="center", va="center", fontsize=21, fontweight="bold",
-            color="#0b1f3a", zorder=2)
-        summary_ax.text(4.2, 0.72, "met or exceeded the threshold",
-            ha="center", va="center", fontsize=10, color="#6a8aaa", zorder=2)
-        summary_ax.text(8.8, 1.4, f"{int(round(pct))}%",
-            ha="center", va="center", fontsize=40, fontweight="bold",
-            color="#2979c4", zorder=2)
-        summary_ax.text(8.8, 0.6, "exceedance frequency",
-            ha="center", va="center", fontsize=9, color="#8aaac4", zorder=2)
-        summary_ax.plot([6.5, 6.5], [0.35, 1.85], color="#d0dcea", lw=1.0, zorder=2)
-        summary_fig.tight_layout(pad=0)
-
-        # Show on screen
-        st.pyplot(summary_fig)
-
-        jpeg_buf = _io.BytesIO()
-        summary_fig.savefig(jpeg_buf, format="jpeg", dpi=150,
-                            bbox_inches="tight", facecolor="#ffffff")
-        jpeg_buf.seek(0)
-        plt.close(summary_fig)
-
-        # ── Downloads ─────────────────────────────────────────────────────
-        dl1, dl2 = st.columns(2)
-        with dl1:
-            export = annual_max.copy()
-            export["window_days"]  = int(win_days)
-            export["threshold_mm"] = threshold
-            export["season"]       = slabel
-            st.download_button(
-                "💾  Export CSV",
-                data=export.to_csv(index=False),
-                file_name=f"rolling_window_{name.replace(' ', '_')}.csv",
-                mime="text/csv",
-            )
-        with dl2:
-            st.download_button(
-                "🖼️  Download summary image",
-                data=jpeg_buf,
-                file_name=f"rain_summary_{name.replace(' ', '_')}.jpg",
-                mime="image/jpeg",
-            )
-
+        # ── Download button ────────────────────────────────────────────────
+        st.download_button(
+            "🖼️  Download summary image",
+            data=jpeg_buf,
+            file_name=f"rain_summary_{name.replace(' ', '_')}.jpg",
+            mime="image/jpeg",
+        )
     except Exception as e:
         st.error(f"Analysis error: {e}")
