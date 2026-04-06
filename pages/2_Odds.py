@@ -232,12 +232,6 @@ if run_btn and selected_station:
     yr_from, yr_to = years[0], years[-1]
     ann_mean = df.groupby("year")["rain"].sum().mean()
 
-    st.markdown(f"""<div class="chip-row">
-      <div class="chip">✅ <b>{name}</b></div>
-      <div class="chip"><b>{yr_from}–{yr_to}</b> period</div>
-      <div class="chip">Annual mean <b>{int(round(ann_mean))} mm</b></div>
-    </div>""", unsafe_allow_html=True)
-
     try:
         sm = MONTHS.index(start_mon) + 1
         em = MONTHS.index(end_mon)   + 1
@@ -268,21 +262,44 @@ if run_btn and selected_station:
         n          = len(rain)
         n_exceed   = int(np.sum(rain >= threshold))
         pct        = n_exceed / n * 100
+        pct_display = int(round(pct))
+        ann_mean   = round(df.groupby("year")["rain"].sum().mean())
 
-        ann_mean = round(df.groupby("year")["rain"].sum().mean())
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Station", name)
-        c2.metric("Period", f"{yr_from}–{yr_to}")
-        c3.metric("Years exceeded", f"{n_exceed} of {n}")
-        c4.metric("Exceedance frequency", f"{int(round(pct))}%")
-        st.caption(f"Query: ≥ {int(threshold)} mm rain in any {int(win_days)}-day window · {slabel} · Annual mean {ann_mean} mm")
+        # ── Probability analysis header ────────────────────────────────────
+        st.markdown(f"""
+<div style="background:#f0f6ff; border-radius:10px; padding:18px 22px 14px 22px; margin-bottom:4px;">
+  <div style="font-size:1.45rem; font-weight:700; color:#1a3a5c; margin-bottom:6px;">
+    Probability analysis
+  </div>
+  <div style="display:flex; align-items:baseline; gap:0; flex-wrap:wrap;">
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">Rainfall exceeded&nbsp;</span>
+    <span style="font-size:1.02rem; color:#e06b00; font-weight:700;">{int(threshold)} mm</span>
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">&nbsp;in&nbsp;</span>
+    <span style="font-size:1.02rem; color:#e06b00; font-weight:700;">{int(win_days)} days</span>
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">&nbsp;between&nbsp;</span>
+    <span style="font-size:1.02rem; color:#2979c4; font-weight:600;">{sd_i} {MONTHS[sm-1]}</span>
+    <span style="font-size:1.02rem; color:#444; font-weight:500;">&nbsp;and&nbsp;</span>
+    <span style="font-size:1.02rem; color:#2979c4; font-weight:600;">{ed_i} {MONTHS[em-1]}</span>
+    <span style="flex:1; min-width:20px;"></span>
+    <span style="font-size:1.5rem; font-weight:800; color:#0b1f3a;">
+      {pct_display}%&nbsp;<span style="font-size:1.02rem; font-weight:500; color:#444;">of years</span>
+    </span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-        # Chart
+        # ── Chart ──────────────────────────────────────────────────────────
         NAVY = "#0b1f3a"; BLUE = "#2979c4"; BRIGHT = "#4da6ff"
         MISS = "#b8cfe8"; BG = "#f7fafd"; GRID = "#dde5ee"
 
         fig, ax = plt.subplots(figsize=(14, 4.0))
         fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
+
+        ax.text(0.5, 1.015,
+                f"{name.upper()}  ·  {sd_i} {MONTHS[sm-1]} – {ed_i} {MONTHS[em-1]}"
+                f"  ·  {int(win_days)}-day window  ·  {yr_from}–{yr_to}",
+                transform=ax.transAxes, ha="center", va="bottom",
+                fontsize=9.5, color="#5a7a9a")
 
         colours = [BRIGHT if r >= threshold else MISS for r in annual_max["max_roll_mm"]]
         bars = ax.bar(annual_max["season_year"], annual_max["max_roll_mm"],
@@ -292,11 +309,12 @@ if run_btn and selected_station:
                 bar.set_edgecolor(BLUE); bar.set_linewidth(0.8)
 
         ax.axhline(threshold, color=NAVY, lw=1.8, ls="--", zorder=4)
-        ax.text(annual_max["season_year"].max() + 0.5,
-                threshold + rain.max() * 0.018,
-                f"▶  {int(threshold)} mm",
-                color=NAVY, fontsize=9.5, va="bottom",
-                fontweight="bold", fontfamily="monospace")
+        x_right = annual_max["season_year"].max()
+        ax.annotate(f"{int(threshold)} mm",
+                    xy=(x_right, threshold), xytext=(6, 4),
+                    textcoords="offset points", fontsize=9.5, color=NAVY,
+                    fontweight="bold", va="bottom", ha="left",
+                    annotation_clip=False)
 
         ax.set_xlabel("Season year", fontsize=10, color="#3a5a7a", labelpad=6)
         ax.set_ylabel(f"Max {int(win_days)}-day rainfall  (mm)",
@@ -307,92 +325,121 @@ if run_btn and selected_station:
         ax.set_axisbelow(True)
         for sp in ["top", "right", "left"]: ax.spines[sp].set_visible(False)
         ax.spines["bottom"].set_color(GRID)
-        ax.set_title(
-            f"{name}   ·   {slabel}   ·   {int(win_days)}-day window   ·   {yr_from}–{yr_to}",
-            fontsize=11, fontweight="bold", color=NAVY, pad=10,
-        )
-        from matplotlib.patches import Patch
+
+        from matplotlib.patches import Patch as _Patch
         ax.legend(handles=[
-            Patch(color=BRIGHT, edgecolor=BLUE, linewidth=0.8,
-                  label=f"≥ {int(threshold)} mm  ({n_exceed} yrs)"),
-            Patch(color=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
+            _Patch(facecolor=BRIGHT, edgecolor=BLUE, linewidth=0.8,
+                   label=f"≥ {int(threshold)} mm  ({n_exceed} yrs)"),
+            _Patch(facecolor=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
         ], fontsize=9, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
         fig.tight_layout(pad=1.1)
 
+        # ── Save JPEG before closing fig ───────────────────────────────────
+        import io as _io
+        import matplotlib.gridspec as _gs
 
-        # ── Bar chart ─────────────────────────────────────────────────────
+        PANEL_H = 1.4
+        CHART_H = 4.0
+        DPI     = 150
+
+        comp_fig = plt.figure(figsize=(14, PANEL_H + CHART_H), facecolor="white")
+        spec = _gs.GridSpec(2, 1, figure=comp_fig,
+                            height_ratios=[PANEL_H, CHART_H], hspace=0.0)
+
+        hax = comp_fig.add_subplot(spec[0])
+        hax.set_facecolor("#f0f6ff")
+        hax.set_xlim(0, 1); hax.set_ylim(0, 1)
+        hax.axis("off")
+        hax.text(0.012, 0.95, f"Station: {name}",
+                 ha="left", va="top", fontsize=9, fontweight="bold",
+                 color="#0b1f3a", transform=hax.transAxes)
+        hax.text(0.012, 0.78, f"{yr_from}-{yr_to} period",
+                 ha="left", va="top", fontsize=8.5, color="#444",
+                 transform=hax.transAxes)
+        hax.text(0.012, 0.60, f"Annual mean {ann_mean} mm",
+                 ha="left", va="top", fontsize=8.5, fontweight="bold",
+                 color="#444", transform=hax.transAxes)
+        hax.text(0.012, 0.36, "Probability analysis",
+                 ha="left", va="top", fontsize=13, fontweight="bold",
+                 color="#1a3a5c", transform=hax.transAxes)
+
+        parts = [
+            ("Rainfall exceeded ", "#444", False),
+            (f"{int(threshold)} mm", "#e06b00", True),
+            (" in ", "#444", False),
+            (f"{int(win_days)} days", "#e06b00", True),
+            (" between ", "#444", False),
+            (f"{sd_i} {MONTHS[sm-1]}", "#2979c4", True),
+            (" and ", "#444", False),
+            (f"{ed_i} {MONTHS[em-1]}", "#2979c4", True),
+        ]
+        comp_fig.canvas.draw()
+        renderer = comp_fig.canvas.get_renderer()
+        ax_bbox  = hax.get_window_extent(renderer=renderer)
+        x_cur = 0.012; y_row = 0.10
+        for txt, col, bold in parts:
+            t = hax.text(x_cur, y_row, txt, ha="left", va="top", fontsize=10,
+                         fontweight="bold" if bold else "normal",
+                         color=col, transform=hax.transAxes)
+            comp_fig.canvas.draw()
+            bb = t.get_window_extent(renderer=renderer)
+            x_cur += bb.width / ax_bbox.width
+        hax.text(0.988, 0.10, f"{pct_display}% of years",
+                 ha="right", va="top", fontsize=13, fontweight="bold",
+                 color="#0b1f3a", transform=hax.transAxes)
+
+        cax = comp_fig.add_subplot(spec[1])
+        cax.set_facecolor(BG)
+        cax.text(0.5, 1.012,
+                 f"{name.upper()}  ·  {sd_i} {MONTHS[sm-1]} – {ed_i} {MONTHS[em-1]}"
+                 f"  ·  {int(win_days)}-day window  ·  {yr_from}–{yr_to}",
+                 transform=cax.transAxes, ha="center", va="bottom",
+                 fontsize=8.5, color="#5a7a9a")
+        colours2 = [BRIGHT if r >= threshold else MISS for r in annual_max["max_roll_mm"]]
+        bars2 = cax.bar(annual_max["season_year"], annual_max["max_roll_mm"],
+                        color=colours2, width=0.72, zorder=3, linewidth=0, alpha=0.95)
+        for bar, r in zip(bars2, annual_max["max_roll_mm"]):
+            if r >= threshold:
+                bar.set_edgecolor(BLUE); bar.set_linewidth(0.8)
+        cax.axhline(threshold, color=NAVY, lw=1.8, ls="--", zorder=4)
+        cax.annotate(f"{int(threshold)} mm",
+                     xy=(annual_max["season_year"].max(), threshold),
+                     xytext=(6, 4), textcoords="offset points",
+                     fontsize=9, color=NAVY, fontweight="bold",
+                     va="bottom", ha="left", annotation_clip=False)
+        cax.set_xlabel("Season year", fontsize=9.5, color="#3a5a7a", labelpad=5)
+        cax.set_ylabel(f"Max {int(win_days)}-day rainfall  (mm)",
+                       fontsize=9.5, color="#3a5a7a", labelpad=5)
+        cax.tick_params(colors="#3a5a7a", labelsize=8.5)
+        if n > 30: cax.tick_params(axis="x", rotation=45)
+        cax.grid(True, axis="y", color=GRID, lw=0.9, zorder=0)
+        cax.set_axisbelow(True)
+        for sp in ["top", "right", "left"]: cax.spines[sp].set_visible(False)
+        cax.spines["bottom"].set_color(GRID)
+        cax.legend(handles=[
+            _Patch(facecolor=BRIGHT, edgecolor=BLUE, linewidth=0.8,
+                   label=f"≥ {int(threshold)} mm  ({n_exceed} yrs)"),
+            _Patch(facecolor=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
+        ], fontsize=8.5, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
+        comp_fig.tight_layout(pad=0.8)
+
+        jpeg_buf = _io.BytesIO()
+        comp_fig.savefig(jpeg_buf, format="jpeg", dpi=DPI,
+                         bbox_inches="tight", facecolor="white")
+        jpeg_buf.seek(0)
+        plt.close(comp_fig)
+
+        # ── Display chart on screen ────────────────────────────────────────
         st.pyplot(fig)
         plt.close(fig)
 
-        # ── Build JPEG summary for download (keep matplotlib version) ─────
-        import io as _io
-        from matplotlib.patches import FancyBboxPatch
-        summary_fig, summary_ax = plt.subplots(figsize=(10, 4.0))
-        summary_fig.patch.set_facecolor("#ffffff")
-        summary_ax.set_facecolor("#ffffff")
-        summary_ax.set_xlim(0, 10); summary_ax.set_ylim(0, 4.0)
-        summary_ax.axis("off")
-        summary_ax.add_patch(FancyBboxPatch((0.08, 0.08), 9.84, 3.84,
-            boxstyle="round,pad=0.12", facecolor="#ffffff",
-            edgecolor="#c8d8ec", linewidth=1.5, zorder=0))
-        summary_ax.add_patch(FancyBboxPatch((0.08, 3.28), 9.84, 0.68,
-            boxstyle="round,pad=0.12", facecolor="#2979c4",
-            edgecolor="none", zorder=1))
-        summary_ax.text(5, 3.62, "What are the odds?   ·   Rain frequency summary",
-            ha="center", va="center", fontsize=12.5, fontweight="bold",
-            color="white", zorder=2)
-        summary_ax.text(0.4, 2.95, name,
-            ha="left", va="center", fontsize=15, fontweight="bold",
-            color="#0b1f3a", zorder=2)
-        summary_ax.text(0.4, 2.6,
-            f"Season: {slabel}     Record: {yr_from}–{yr_to}",
-            ha="left", va="center", fontsize=10.5, color="#4a6e94", zorder=2)
-        summary_ax.plot([0.4, 9.6], [2.38, 2.38], color="#d0dcea", lw=1.0, zorder=2)
-        summary_ax.text(0.4, 2.12,
-            f"Query:  >= {int(threshold)} mm rain within any {int(win_days)}-day window  .  {slabel}",
-            ha="left", va="center", fontsize=10.5, color="#5a7a9a", zorder=2)
-        summary_ax.text(4.2, 1.28, f"{n_exceed} of {n} years",
-            ha="center", va="center", fontsize=21, fontweight="bold",
-            color="#0b1f3a", zorder=2)
-        summary_ax.text(4.2, 0.72, "met or exceeded the threshold",
-            ha="center", va="center", fontsize=10, color="#6a8aaa", zorder=2)
-        summary_ax.text(8.8, 1.4, f"{int(round(pct))}%",
-            ha="center", va="center", fontsize=40, fontweight="bold",
-            color="#2979c4", zorder=2)
-        summary_ax.text(8.8, 0.6, "exceedance frequency",
-            ha="center", va="center", fontsize=9, color="#8aaac4", zorder=2)
-        summary_ax.plot([6.5, 6.5], [0.35, 1.85], color="#d0dcea", lw=1.0, zorder=2)
-        summary_fig.tight_layout(pad=0)
-
-        # Show on screen
-        st.pyplot(summary_fig)
-
-        jpeg_buf = _io.BytesIO()
-        summary_fig.savefig(jpeg_buf, format="jpeg", dpi=150,
-                            bbox_inches="tight", facecolor="#ffffff")
-        jpeg_buf.seek(0)
-        plt.close(summary_fig)
-
-        # ── Downloads ─────────────────────────────────────────────────────
-        dl1, dl2 = st.columns(2)
-        with dl1:
-            export = annual_max.copy()
-            export["window_days"]  = int(win_days)
-            export["threshold_mm"] = threshold
-            export["season"]       = slabel
-            st.download_button(
-                "💾  Export CSV",
-                data=export.to_csv(index=False),
-                file_name=f"rolling_window_{name.replace(' ', '_')}.csv",
-                mime="text/csv",
-            )
-        with dl2:
-            st.download_button(
-                "🖼️  Download summary image",
-                data=jpeg_buf,
-                file_name=f"rain_summary_{name.replace(' ', '_')}.jpg",
-                mime="image/jpeg",
-            )
+        # ── Download button ────────────────────────────────────────────────
+        st.download_button(
+            "🖼️  Download summary image",
+            data=jpeg_buf,
+            file_name=f"rain_summary_{name.replace(' ', '_')}.jpg",
+            mime="image/jpeg",
+        )
 
     except Exception as e:
         st.error(f"Analysis error: {e}")
