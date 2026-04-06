@@ -66,7 +66,7 @@ def _search(query: str):
 
 # Version tag — increment to bust the Streamlit cache when silo.py changes
 # Increment SILO_CACHE_V to bust the Streamlit cache after silo.py changes
-SILO_CACHE_V = "v7"
+SILO_CACHE_V = "v9"
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _fetch(station_id: int, start: str, end: str, lat: float = None, lon: float = None, cache_version: str = SILO_CACHE_V) -> pd.DataFrame:
@@ -413,8 +413,10 @@ if run_clicked:
         st.error("No soil files found.")
         st.stop()
 
-    sid       = station_info["id"]
-    stn_name  = station_info["name"]
+    sid      = station_info["id"]
+    stn_name = station_info["name"]
+    _lat     = station_info.get("lat")
+    _lon     = station_info.get("lon")
     safe_end  = today - timedelta(days=3)
     start_str = start_date.strftime("%Y%m%d")
     end_str   = safe_end.strftime("%Y%m%d")

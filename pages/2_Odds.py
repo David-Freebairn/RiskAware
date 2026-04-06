@@ -54,7 +54,7 @@ def _search(term):
     return search_stations(term)
 
 
-SILO_CACHE_V = "v7"
+SILO_CACHE_V = "v9"
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _fetch(station_id, start, end, lat=None, lon=None, cache_version=SILO_CACHE_V):
