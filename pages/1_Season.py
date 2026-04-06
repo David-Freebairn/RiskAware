@@ -386,7 +386,7 @@ with col_c:
         "Run analysis",
         type="primary",
         disabled=(station_info is None),
-        use_container_width=True,
+        width='stretch',
     )
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
@@ -483,7 +483,7 @@ if run_clicked or st.session_state.get("se_result"):
             transform=ax.transAxes, ha="center", va="bottom",
             fontsize=9, color="#5a7a9a")
 
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig, width='stretch')
 
     # ── Composite JPEG download (header panel + chart) ─────────────────────
     import matplotlib.gridspec as _gs

@@ -400,7 +400,7 @@ col_l, col_c, col_r = st.columns([1, 2, 1])
 with col_c:
     run_clicked = st.button("Fetch data and run analysis", type="primary",
                             disabled=(station_info is None or soil_path is None),
-                            use_container_width=True)
+                            width='stretch')
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 if run_clicked:
@@ -530,7 +530,7 @@ if run_clicked:
                 f"{stn_name.upper()}  ·  {start_label} – {end_label}  ·  {profile.name}",
                 transform=ax.transAxes, ha="center", va="bottom",
                 fontsize=9, color="#5a7a9a")
-        st.pyplot(fig, use_container_width=True)
+        st.pyplot(fig, width='stretch')
 
     # ── Composite JPEG (header + chart) ───────────────────────────────────────
     import matplotlib.gridspec as _gs

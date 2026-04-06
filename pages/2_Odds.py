@@ -208,7 +208,7 @@ with st.container(border=True):
 
 run_btn = st.button("Fetch data and run analysis", type="primary",
                     disabled=selected_station is None,
-                    use_container_width=True)
+                    width='stretch')
 
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
@@ -349,9 +349,9 @@ if run_btn and selected_station:
 
         from matplotlib.patches import Patch
         ax.legend(handles=[
-            Patch(color=BRIGHT, edgecolor=BLUE, linewidth=0.8,
+            Patch(facecolor=BRIGHT, edgecolor=BLUE, linewidth=0.8,
                   label=f"≥ {int(threshold)} mm  ({n_exceed} yrs)"),
-            Patch(color=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
+            Patch(facecolor=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
         ], fontsize=9, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
         fig.tight_layout(pad=1.1)
 
@@ -380,7 +380,7 @@ if run_btn and selected_station:
         hax.axis("off")
 
         # Station / period / mean info (top-left, small)
-        hax.text(0.012, 0.97, f"✅ {name}",
+        hax.text(0.012, 0.97, f"Station: {name}",
                  ha="left", va="top", fontsize=9, fontweight="bold", color="#0b1f3a",
                  transform=hax.transAxes)
         hax.text(0.012, 0.78, f"{yr_from}–{yr_to} period",
@@ -464,9 +464,9 @@ if run_btn and selected_station:
             cax.spines[sp].set_visible(False)
         cax.spines["bottom"].set_color(GRID)
         cax.legend(handles=[
-            _Patch(color=BRIGHT, edgecolor=BLUE, linewidth=0.8,
+            _Patch(facecolor=BRIGHT, edgecolor=BLUE, linewidth=0.8,
                    label=f"≥ {int(threshold)} mm  ({n_exceed} yrs)"),
-            _Patch(color=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
+            _Patch(facecolor=MISS, label=f"< {int(threshold)} mm  ({n - n_exceed} yrs)"),
         ], fontsize=8.5, loc="upper left", framealpha=0.95, edgecolor=GRID, fancybox=False)
 
         comp_fig.tight_layout(pad=0.8)
